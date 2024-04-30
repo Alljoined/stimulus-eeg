@@ -1,0 +1,7 @@
+numpy
+pillow
+psychopy
+python-dotenv
+scipy
+websocket-client
+
