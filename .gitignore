@@ -4,3 +4,6 @@ cert.pem
 
 # data files
 processed-stimulus
+
+# large files
+stimulus/coco_images_224_float16.hdf5
