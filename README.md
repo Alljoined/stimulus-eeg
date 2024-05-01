@@ -13,4 +13,5 @@
 
 ## Imagery
 
-You will need to run download_coco.py to download the images first. This will take 22gb.
+You will need to run `download_coco.py` to download the images first. This will take 22gb.
+After you will need to run `convert_224_stimuli_v2.py` to split the coco images into their respective files for ingestion in `stimulus.py`
