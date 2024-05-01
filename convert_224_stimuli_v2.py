@@ -8,6 +8,7 @@ import argparse
 import os
 
 file_path = os.path.join("stimulus", "coco_images_224_float16.hdf5")
+# file_path = "/Users/jonathan/Documents/coding/alljoined/stimulus-emotiv/stimulus/datasets--pscotti--mindeyev2/snapshots/183269ab73b49d2fa10b5bfe077194992934e4e6/coco_images_224_float16.hdf5"
 label_path = os.path.join("stimulus", "nsd_expdesign.mat")
 save_path = "processed-stimulus"
 #

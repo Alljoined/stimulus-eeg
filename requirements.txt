@@ -4,4 +4,5 @@ psychopy
 python-dotenv
 scipy
 websocket-client
-
+huggingface_hub
+h5py

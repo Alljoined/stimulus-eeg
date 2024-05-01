@@ -154,6 +154,10 @@ async def teardown_eeg():
         }, websocket)
         print(response)
         # wait for warning 18
+        # The record data has been successfully saved. Cortex sends 
+        # this warning when a record is done with some long-run 
+        # post processing after record is stopped.
+        # https://emotiv.gitbook.io/cortex-api/records/exportrecord
         # export the record
 
 async def record_trigger(trigger_number, debug_mode=True):
@@ -402,8 +406,8 @@ async def main():
     await setup_eeg()
 
     # Parameters
-    n_images = 120  # Number of unique images
-    n_oddballs = 24  # Number of oddball images
+    n_images = 5  # Number of unique images
+    n_oddballs = 2  # Number of oddball images
     num_blocks = 16  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
     window_size = window.size
@@ -418,7 +422,8 @@ async def main():
     # Save results
     # This is where you would implement saving the collected data
     # e.g., response times, accuracy, etc., to a file
-    await teardown_eeg()
+    # this would be the ideal place to put the teardown_eeg function
+    # but for some reason the code doesn't get to here
 
 
 if __name__ == '__main__':
