@@ -406,8 +406,8 @@ async def main():
     await setup_eeg()
 
     # Parameters
-    n_images = 5  # Number of unique images
-    n_oddballs = 2  # Number of oddball images
+    n_images = 120  # Number of unique images
+    n_oddballs = 24  # Number of oddball images
     num_blocks = 16  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
     window_size = window.size
