@@ -2,14 +2,14 @@
 
 ## Setup
 
-1. create a `.env` file based off of [.env.template](./.env.template)
-1. create a file called `cert.pem` containing the contents from [this](https://github.com/Emotiv/cortex-example/blob/master/certificates/rootCA.pem)
-1. install all [requirements](./requirements.txt)
-1. download `coco_file_224_sub1_ses1.mat` and put it into a folder called `processed-stimulus`
-1. install the [emotive launcher](https://www.emotiv.com/products/emotiv-launcher#download)
-1. log into the emotiv launcher. this is a background app that acts as a wss server
-1. run [`stimulus.py`](./stimulus.py)
-1. on the first time running this script, use the emotiv launcher to accept access from the headset
+1. Create a `.env` file based off of [.env.template](./.env.template)
+2. Create a file called `cert.pem` containing the contents from [this](https://github.com/Emotiv/cortex-example/blob/master/certificates/rootCA.pem)
+3. Install all [requirements](./requirements.txt)
+4. Download `coco_file_224_sub1_ses1.mat` and put it into a folder called `processed-stimulus`
+5. Install the [emotive launcher](https://www.emotiv.com/products/emotiv-launcher#download)
+6. Log into the emotiv launcher and set it up with the headset. This app will also act as a wss server
+7. Run [`stimulus.py`](./stimulus.py)
+8. On the first time running this script, use the emotiv launcher to accept access from the headset
 
 ## Imagery
 

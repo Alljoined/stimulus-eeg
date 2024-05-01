@@ -91,8 +91,9 @@ async def setup_eeg():
             }
         }, websocket)
         if "error" in response:
-            print(response["error"]) # if it gets here, probably didn't set up env variables correctly
-            return
+            error = response["error"]
+            print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
+            exit(1);
         cortex_token = response["result"]["cortexToken"]
         response = await send_message({
             "id": 1,
@@ -161,13 +162,10 @@ async def teardown_eeg():
         # export the record
 
 async def record_trigger(trigger_number, debug_mode=True):
-    # Record or send a trigger to the EEG device
-    # This part needs to be adapted based on your EEG device's API
     if debug_mode:
         logging.log(level=logging.DATA,
                     msg=f"Trigger recorded: {trigger_number}")
-    else: # assuming we want to record trigger no matter what
-        # Implement actual trigger recording here
+    else:
         async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
             response = await send_message({
                 "id": 1,
