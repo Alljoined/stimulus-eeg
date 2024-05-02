@@ -11,6 +11,7 @@ import websockets # pip install websocket-client
 import json
 import ssl
 import os
+import time
 from dotenv import load_dotenv # pip install python-dotenv
 
 # Placeholder function for EEG setup and trigger recording
@@ -34,6 +35,7 @@ async def setup_eeg():
     async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
         # by default emotiv uses port 6868, uses wss protocol
         # first need to request access
+        print("Requesting access")
         await send_message({
             "id": 1,
             "jsonrpc": "2.0",
@@ -61,7 +63,7 @@ async def setup_eeg():
         }, websocket)
         if len(response["result"]) == 0:
             print("No headsets found")
-            return
+            exit(1)
         # connect to the headset
         headset = response["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
         await send_message({
@@ -93,7 +95,7 @@ async def setup_eeg():
         if "error" in response:
             error = response["error"]
             print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
-            exit(1);
+            exit(1)
         cortex_token = response["result"]["cortexToken"]
         response = await send_message({
             "id": 1,
@@ -118,23 +120,9 @@ async def setup_eeg():
             }
         }, websocket)
 
-        response = await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "createRecord",
-            "params": {
-                "cortexToken": cortex_token,
-                "session": session_id,
-                "title": "Alljoined Cortex Recording Session"
-            }
-        }, websocket)
-        record_id = response["result"]["record"]["uuid"]
-
         headset_info["headset"] = headset
         headset_info["cortex_token"] = cortex_token
         headset_info["session_id"] = session_id
-        headset_info["record_id"] = record_id
-        headset_info["record_ids"] = [record_id]
 
 async def teardown_eeg():
     async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
@@ -161,7 +149,40 @@ async def teardown_eeg():
         # https://emotiv.gitbook.io/cortex-api/records/exportrecord
         # export the record
 
-async def record_trigger(trigger_number, debug_mode=True):
+
+async def create_record(block):
+    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
+        response = await send_message({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "createRecord",
+            "params": {
+                "cortexToken": headset_info["cortex_token"],
+                "session": headset_info["session_id"],
+                "title": f"Block {block} Recording"
+            }
+        }, websocket)
+    record_id = response["result"]["record"]["uuid"]
+    headset_info["record_id"] = record_id
+
+
+async def stop_record():
+    if not headset_info["record_id"]:
+        return
+
+    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
+        await send_message({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "stopRecord",
+            "params": {
+                "cortexToken": headset_info["cortex_token"],
+                "record": headset_info["record_id"],
+            }
+        }, websocket)
+
+
+async def record_trigger(trigger_number, time, debug_mode=True):
     if debug_mode:
         logging.log(level=logging.DATA,
                     msg=f"Trigger recorded: {trigger_number}")
@@ -170,17 +191,17 @@ async def record_trigger(trigger_number, debug_mode=True):
             response = await send_message({
                 "id": 1,
                 "jsonrpc": "2.0",
-                "method": "updateRecord",
+                "method": "injectMarker",
                 "params": {
                     "cortexToken": headset_info["cortex_token"],
-                    "record": headset_info["record_id"],
-                    "description": f"Trigger {trigger_number}",
-                    "tags": [f"trigger-{trigger_number}"]
+                    "session": headset_info["session_id"],
+                    "time": time,
+                    "label": "TRIGGER",
+                    "value": trigger_number
                 }
             }, websocket)
-            uuid = response["result"]["uuid"]
-            if not uuid in headset_info["record_ids"]:
-                headset_info["record_ids"].append(uuid)
+            # delete this line
+            print(response);
 
 
 def validate_block(block_trials):
@@ -286,21 +307,17 @@ def display_instructions(window, session_number):
 async def run_experiment(trials, window, subj, session_number, n_images, all_images):
     last_image = None
 
-    current_block = 1  # Initialize the current block counter
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
 
+    # Create a record for the session
+    current_block = 1  # Initialize the current block counter
+    await create_record(current_block)
+    start_time = time.time()
     for idx, trial in enumerate(trials):
         if 'escape' in event.getKeys():
             print("Experiment terminated early.")
             break
-
-        if trial['block'] != current_block:
-            current_block = trial['block']
-            start_index = ((current_block - 1) % 8) * n_images
-            end_index = start_index + n_images
-            print(f"\nBlock {current_block}, Start Index: {start_index}")
-            print(f"Block {current_block}, End Index: {end_index}\n")
 
         block_images = select_block_images(
             all_images, trial['block'], n_images)
@@ -332,10 +349,11 @@ async def run_experiment(trials, window, subj, session_number, n_images, all_ima
 
         # Record a placeholder trigger
         # await record_trigger(99)
-        await record_trigger(trial['trial'], debug_mode=False)
+        await record_trigger(trial['trial'], time.time() - start_time, debug_mode=False)
 
         # Check if end of block
         if trial['end_of_block']:
+            await stop_record()
             # Print the image sequence for the current block
             print(
                 f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
@@ -344,6 +362,16 @@ async def run_experiment(trials, window, subj, session_number, n_images, all_ima
 
             # Display break message at the end of each block
             display_break_message(window, trial['block'])
+
+            # Create a new record for the next block
+            current_block += 1
+            start_index = ((current_block - 1) % 8) * n_images
+            end_index = start_index + n_images
+            print(f"\nBlock {current_block}, Start Index: {start_index}")
+            print(f"Block {current_block}, End Index: {end_index}\n")
+            await create_record(current_block)
+            start_time = time.time()
+
     await teardown_eeg()
     # Display completion message
     display_completion_message(window)
