@@ -118,7 +118,8 @@ async def setup_eeg(websocket):
     headset_info["headset"] = headset
     headset_info["cortex_token"] = cortex_token
     headset_info["session_id"] = session_id
-    print("setting up session with id:", session_id)
+    headset_info["record_ids"] = []
+
 
     response = await send_message({
         "id": 1,
@@ -139,7 +140,7 @@ async def teardown_eeg(websocket):
             "cortexToken": headset_info["cortex_token"],
             "folder": "/tmp/edf",
             "format": "EDF",
-            # "recordIds": headset_info["record_ids"],
+            "recordIds": headset_info["record_ids"],
             "streamTypes": [
                 "EEG",
                 "MOTION"
@@ -168,6 +169,7 @@ async def create_record(block, websocket):
     }, websocket)
     record_id = response["result"]["record"]["uuid"]
     headset_info["record_id"] = record_id
+    headset_info["record_ids"].append(record_id)
     
     response = await send_message({
         "id": 1,
