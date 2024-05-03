@@ -137,17 +137,6 @@ async def teardown_eeg(websocket):
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
-        "method": "updateSession",
-        "params": {
-            "cortexToken": headset_info["cortex_token"],
-            "session": headset_info["session_id"],
-            "status": "close"
-        }
-    }, websocket)
-    print("session closed:", response)
-    response = await send_message({
-        "id": 1,
-        "jsonrpc": "2.0",
         "method": "controlDevice",
         "params": {
             "command": "disconnect",
