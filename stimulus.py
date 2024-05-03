@@ -132,7 +132,7 @@ async def setup_eeg(websocket):
     }, websocket)
 
 
-async def teardown_eeg(websocket):
+async def teardown_eeg(websocket, subj, session):
     time.sleep(1)
     response = await send_message({
         "id": 1,
@@ -145,13 +145,18 @@ async def teardown_eeg(websocket):
     }, websocket)
     print("headset disconnected:", response)
     time.sleep(1)
+
+    # Save to output directory
+    output_path = os.path.join("recordings", "subj_" + subj, "session_" + session)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
     response = await send_message({
         "id": 5,
         "jsonrpc": "2.0",
         "method": "exportRecord",
         "params": {
             "cortexToken": headset_info["cortex_token"],
-            "folder": f"{os.path.dirname(os.path.abspath(__file__))}/tmp/edf",
+            "folder": output_path,
             "format": "EDF",
             "recordIds": headset_info["record_ids"],
             "streamTypes": [
@@ -384,7 +389,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, all
             print(f"Block {current_block}, End Index: {end_index}\n")
 
     await stop_record(websocket)
-    await teardown_eeg(websocket)
+    await teardown_eeg(websocket, subj, session)
     # Display completion message
     display_completion_message(window)
 
@@ -441,8 +446,8 @@ async def main():
         await setup_eeg(websocket)
 
         # Parameters
-        n_images = 60  # Number of unique images per block
-        n_oddballs = 24  # Number of oddball images per block
+        n_images = 10  # Number of unique images per block
+        n_oddballs = 2  # Number of oddball images per block
         num_blocks = 16  # Number of blocks
         img_width, img_height = 425, 425  # Define image dimensions
         window_size = window.size
