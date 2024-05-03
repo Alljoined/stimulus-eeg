@@ -28,180 +28,189 @@ async def send_message(message, websocket):
         response = await websocket.recv()
         return json.loads(response)
 
-async def setup_eeg():
-    
+async def setup_eeg(websocket):
     # Initialize EEG, e.g., with Emotiv SDK
     # This function needs to be implemented based on your EEG SDK's documentation
-    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
-        # by default emotiv uses port 6868, uses wss protocol
-        # first need to request access
-        print("Requesting access")
-        await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "requestAccess",
-            "params": {
-                "clientId": os.environ.get('CLIENT_ID'),
-                "clientSecret": os.environ.get('CLIENT_SECRET'),
+    await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "requestAccess",
+        "params": {
+            "clientId": os.environ.get('CLIENT_ID'),
+            "clientSecret": os.environ.get('CLIENT_SECRET'),
+        }
+    }, websocket)
+    # give it access through launcher
+    # refresh the device list
+    await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "controlDevice",
+        "params": {
+            "command": "refresh"
+        }
+    }, websocket)
+    # query the headsets
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "queryHeadsets"
+    }, websocket)
+    if len(response["result"]) == 0:
+        print("No headsets found")
+        exit(1)
+    # connect to the headset
+    headset = response["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
+    await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "controlDevice",
+        "params": {
+            "command": "connect",
+            "headset": headset,
+            "mappings": { # under the assumption that the headset is an EPOC Flex
+                "CMS": "F3",
+                "DRL": "F5",
+                "LA": "AF3",
+                "LB": "AF7",
+                "RA": "P8"
             }
-        }, websocket)
-        # give it access through launcher
-        # refresh the device list
-        await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "controlDevice",
-            "params": {
-                "command": "refresh"
-            }
-        }, websocket)
-        # query the headsets
-        response = await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "queryHeadsets"
-        }, websocket)
-        if len(response["result"]) == 0:
-            print("No headsets found")
-            exit(1)
-        # connect to the headset
-        headset = response["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
-        await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "controlDevice",
-            "params": {
-                "command": "connect",
-                "headset": headset,
-                "mappings": { # under the assumption that the headset is an EPOC Flex
-                    "CMS": "F3",
-                    "DRL": "F5",
-                    "LA": "AF3",
-                    "LB": "AF7",
-                    "RA": "P8"
-                }
-            }
-        }, websocket)
-        response = await send_message({ # authorize the connection
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "authorize",
-            "params": {
-                "clientId": os.environ.get('CLIENT_ID'),
-                "clientSecret": os.environ.get('CLIENT_SECRET'),
-                "debit": 1000
-            }
-        }, websocket)
-        if "error" in response:
-            error = response["error"]
-            print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
-            exit(1)
-        cortex_token = response["result"]["cortexToken"]
-        response = await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "createSession",
-            "params": {
-                "cortexToken": cortex_token,
-                "headset": headset,
-                "status": "open"
-            }
-        }, websocket)
-        session_id = response["result"]["id"]
+        }
+    }, websocket)
+    response = await send_message({ # authorize the connection
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "authorize",
+        "params": {
+            "clientId": os.environ.get('CLIENT_ID'),
+            "clientSecret": os.environ.get('CLIENT_SECRET'),
+            "debit": 1000
+        }
+    }, websocket)
+    if "error" in response:
+        error = response["error"]
+        print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
+        exit(1)
+    cortex_token = response["result"]["cortexToken"]
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "createSession",
+        "params": {
+            "cortexToken": cortex_token,
+            "headset": headset,
+            "status": "open"
+        }
+    }, websocket)
+    session_id = response["result"]["id"]
 
-        await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "updateSession",
-            "params": {
-                "cortexToken": cortex_token,
-                "session": session_id,
-                "status": "active"
-            }
-        }, websocket)
+    await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "updateSession",
+        "params": {
+            "cortexToken": cortex_token,
+            "session": session_id,
+            "status": "active"
+        }
+    }, websocket)
 
-        headset_info["headset"] = headset
-        headset_info["cortex_token"] = cortex_token
-        headset_info["session_id"] = session_id
+    headset_info["headset"] = headset
+    headset_info["cortex_token"] = cortex_token
+    headset_info["session_id"] = session_id
+    print("setting up session with id:", session_id)
 
-async def teardown_eeg():
-    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
-        response = await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "exportRecord",
-            "params": {
-                "cortexToken": headset_info["cortex_token"],
-                "folder": "/tmp/edf",
-                "format": "EDF",
-                "recordIds": headset_info["record_ids"],
-                "streamTypes": [
-                    "EEG",
-                    "MOTION"
-                ]
-            }
-        }, websocket)
-        print(response)
-        # wait for warning 18
-        # The record data has been successfully saved. Cortex sends 
-        # this warning when a record is done with some long-run 
-        # post processing after record is stopped.
-        # https://emotiv.gitbook.io/cortex-api/records/exportrecord
-        # export the record
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "querySessions",
+        "params": {
+            "cortexToken": cortex_token,
+        }
+    }, websocket)
 
 
-async def create_record(block):
-    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
-        response = await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "createRecord",
-            "params": {
-                "cortexToken": headset_info["cortex_token"],
-                "session": headset_info["session_id"],
-                "title": f"Block {block} Recording"
-            }
-        }, websocket)
+async def teardown_eeg(websocket):
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "exportRecord",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+            "folder": "/tmp/edf",
+            "format": "EDF",
+            # "recordIds": headset_info["record_ids"],
+            "streamTypes": [
+                "EEG",
+                "MOTION"
+            ]
+        }
+    }, websocket)
+    print(response)
+    # wait for warning 18
+    # The record data has been successfully saved. Cortex sends 
+    # this warning when a record is done with some long-run 
+    # post processing after record is stopped.
+    # https://emotiv.gitbook.io/cortex-api/records/exportrecord
+    # export the record
+
+
+async def create_record(block, websocket):
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "createRecord",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+            "session": headset_info["session_id"],
+            "title": f"Block {block} Recording"
+        }
+    }, websocket)
     record_id = response["result"]["record"]["uuid"]
     headset_info["record_id"] = record_id
+    
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "querySessions",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+        }
+    }, websocket)
 
 
-async def stop_record():
+async def stop_record(websocket):
     if not headset_info["record_id"]:
         return
 
-    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
-        await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "stopRecord",
-            "params": {
-                "cortexToken": headset_info["cortex_token"],
-                "record": headset_info["record_id"],
-            }
-        }, websocket)
+    await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "stopRecord",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+            "record": headset_info["record_id"],
+        }
+    }, websocket)
 
 
-async def record_trigger(trigger_number, time, debug_mode=True):
+async def record_trigger(trigger_number, websocket, debug_mode=True):
     if debug_mode:
         logging.log(level=logging.DATA,
                     msg=f"Trigger recorded: {trigger_number}")
     else:
-        async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
-            response = await send_message({
-                "id": 1,
-                "jsonrpc": "2.0",
-                "method": "injectMarker",
-                "params": {
-                    "cortexToken": headset_info["cortex_token"],
-                    "session": headset_info["session_id"],
-                    "time": time,
-                    "label": "TRIGGER",
-                    "value": trigger_number
-                }
-            }, websocket)
-            # delete this line
-            print(response);
+        response = await send_message({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "injectMarker",
+            "params": {
+                "cortexToken": headset_info["cortex_token"],
+                "session": headset_info["session_id"],
+                "time": time.time() * 1000,
+                "label": "TRIGGER",
+                "value": trigger_number if trigger_number >= 0 else trigger_number * -100000
+            }
+        }, websocket)
 
 
 def validate_block(block_trials):
@@ -299,15 +308,14 @@ def display_instructions(window, session_number):
     event.waitKeys(keyList=['space'])
 
 
-async def run_experiment(trials, window, subj, session_number, n_images, all_images, img_width, img_height):
+async def run_experiment(trials, window, websocket, n_images, all_images, img_width, img_height):
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
 
     # Create a record for the session
     current_block = 1  # Initialize the current block counter
-    await create_record(current_block)
-    start_time = time.time()
+    await create_record(current_block, websocket)
     for idx, trial in enumerate(trials):
         if 'escape' in event.getKeys():
             print("Experiment terminated early.")
@@ -347,11 +355,11 @@ async def run_experiment(trials, window, subj, session_number, n_images, all_ima
 
         # Record a placeholder trigger
         # await record_trigger(99)
-        await record_trigger(trial['trial'], time.time() - start_time, debug_mode=False)
+        await record_trigger(trial['trial'], websocket, debug_mode=False)
 
         # Check if end of block
         if trial['end_of_block']:
-            await stop_record()
+            await stop_record(websocket)
             # Print the image sequence for the current block
             print(f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
             # Clear the list for the next block
@@ -366,10 +374,10 @@ async def run_experiment(trials, window, subj, session_number, n_images, all_ima
             end_index = start_index + n_images
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
-            await create_record(current_block)
+            await create_record(current_block, websocket)
             start_time = time.time()
 
-    await teardown_eeg()
+    await teardown_eeg(websocket)
     # Display completion message
     display_completion_message(window)
 
@@ -422,25 +430,26 @@ async def main():
     display_instructions(window, participant_info['Session'])
 
     # Setup EEG
-    await setup_eeg()
+    async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
+        await setup_eeg(websocket)
 
-    # Parameters
-    n_images = 60  # Number of unique images per block
-    n_oddballs = 24  # Number of oddball images per block
-    num_blocks = 16  # Number of blocks
-    img_width, img_height = 425, 425  # Define image dimensions
-    window_size = window.size
+        # Parameters
+        n_images = 60  # Number of unique images per block
+        n_oddballs = 24  # Number of oddball images per block
+        num_blocks = 16  # Number of blocks
+        img_width, img_height = 425, 425  # Define image dimensions
+        window_size = window.size
 
-    trials = create_trials(n_images, n_oddballs, num_blocks)
-    
-    # Run the experiment
-    await run_experiment(trials, window, participant_info['Subject'], participant_info['Session'], n_images, all_images, img_width, img_height)
+        trials = create_trials(n_images, n_oddballs, num_blocks)
+        
+        # Run the experiment
+        await run_experiment(trials, window, websocket, n_images, all_images, img_width, img_height)
 
-    # Save results
-    # This is where you would implement saving the collected data
-    # e.g., response times, accuracy, etc., to a file
-    # this would be the ideal place to put the teardown_eeg function
-    # but for some reason the code doesn't get to here
+        # Save results
+        # This is where you would implement saving the collected data
+        # e.g., response times, accuracy, etc., to a file
+        # this would be the ideal place to put the teardown_eeg function
+        # but for some reason the code doesn't get to here
 
 
 if __name__ == '__main__':
