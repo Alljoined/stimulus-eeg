@@ -8,5 +8,7 @@ processed-stimulus
 # large files
 datasets--pscotti--mindeyev2/
 */coco_images_224_float16.hdf5
+tmp/edf/*.edf
+tmp/edf/*.json
 
 .DS_Store

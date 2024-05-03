@@ -103,6 +103,7 @@ async def setup_eeg(websocket):
         }
     }, websocket)
     session_id = response["result"]["id"]
+    print("created session", session_id)
 
     await send_message({
         "id": 1,
@@ -132,13 +133,36 @@ async def setup_eeg(websocket):
 
 
 async def teardown_eeg(websocket):
+    time.sleep(1)
     response = await send_message({
         "id": 1,
+        "jsonrpc": "2.0",
+        "method": "updateSession",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+            "session": headset_info["session_id"],
+            "status": "close"
+        }
+    }, websocket)
+    print("session closed:", response)
+    response = await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "controlDevice",
+        "params": {
+            "command": "disconnect",
+            "headset": headset_info["headset"]
+        }
+    }, websocket)
+    print("headset disconnected:", response)
+    time.sleep(1)
+    response = await send_message({
+        "id": 5,
         "jsonrpc": "2.0",
         "method": "exportRecord",
         "params": {
             "cortexToken": headset_info["cortex_token"],
-            "folder": "/tmp/edf",
+            "folder": f"{os.path.dirname(os.path.abspath(__file__))}/tmp/edf",
             "format": "EDF",
             "recordIds": headset_info["record_ids"],
             "streamTypes": [
@@ -147,16 +171,10 @@ async def teardown_eeg(websocket):
             ]
         }
     }, websocket)
-    print(response)
-    # wait for warning 18
-    # The record data has been successfully saved. Cortex sends 
-    # this warning when a record is done with some long-run 
-    # post processing after record is stopped.
-    # https://emotiv.gitbook.io/cortex-api/records/exportrecord
-    # export the record
+    print("teardown response:", response)
 
 
-async def create_record(block, websocket):
+async def create_record(subj, session, websocket):
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -164,7 +182,7 @@ async def create_record(block, websocket):
         "params": {
             "cortexToken": headset_info["cortex_token"],
             "session": headset_info["session_id"],
-            "title": f"Block {block} Recording"
+            "title": f"Subject {subj}, Session {session} Recording"
         }
     }, websocket)
     record_id = response["result"]["record"]["uuid"]
@@ -310,14 +328,14 @@ def display_instructions(window, session_number):
     event.waitKeys(keyList=['space'])
 
 
-async def run_experiment(trials, window, websocket, n_images, all_images, img_width, img_height):
+async def run_experiment(trials, window, websocket, subj, session, n_images, all_images, img_width, img_height):
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
 
     # Create a record for the session
     current_block = 1  # Initialize the current block counter
-    await create_record(current_block, websocket)
+    await create_record(subj, session, websocket)
     for idx, trial in enumerate(trials):
         if 'escape' in event.getKeys():
             print("Experiment terminated early.")
@@ -361,7 +379,6 @@ async def run_experiment(trials, window, websocket, n_images, all_images, img_wi
 
         # Check if end of block
         if trial['end_of_block']:
-            await stop_record(websocket)
             # Print the image sequence for the current block
             print(f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
             # Clear the list for the next block
@@ -376,9 +393,8 @@ async def run_experiment(trials, window, websocket, n_images, all_images, img_wi
             end_index = start_index + n_images
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
-            await create_record(current_block, websocket)
-            start_time = time.time()
 
+    await stop_record(websocket)
     await teardown_eeg(websocket)
     # Display completion message
     display_completion_message(window)
@@ -445,7 +461,7 @@ async def main():
         trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
-        await run_experiment(trials, window, websocket, n_images, all_images, img_width, img_height)
+        await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, all_images, img_width, img_height)
 
         # Save results
         # This is where you would implement saving the collected data
