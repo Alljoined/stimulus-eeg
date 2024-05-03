@@ -1,6 +1,5 @@
 # authentication
 .env
-cert.pem
 
 # data files
 processed-stimulus
