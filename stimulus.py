@@ -250,7 +250,7 @@ def create_trials(n_images, n_oddballs, num_blocks):
         block_trials = []
         while not isValidBlock:
             # Generate trials for each block
-            start = 1
+            start = block * n_images + 1
             end = start + n_images
             images = list(range(start, end))
             oddballs = [-1] * n_oddballs
@@ -260,7 +260,7 @@ def create_trials(n_images, n_oddballs, num_blocks):
             isValidBlock = validate_block(block_trials)
 
         for idx, trial in enumerate(block_trials):
-            trials.append({'block': (block + 1), 'trial': trial, 'end_of_block': (idx == len(block_trials) - 1)})
+            trials.append({'block': (block + 1), 'image': trial, 'end_of_block': (idx == len(block_trials) - 1)})
 
     return trials
 
@@ -316,11 +316,11 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             print(f"Block {current_block}, End Index: {end_index}\n")
         
         # Check if this trial is an oddball
-        is_oddball = (trial['trial'] == -1)
+        is_oddball = (trial['image'] == -1)
         if is_oddball:
             image = last_image
         else:
-            nsd_id = img_map[start_index + trial['trial'] - 1] # Recall that trial and img_map is 1-indexed
+            nsd_id = img_map[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
             # Adjust index for 0-based Python indexing
             with h5py.File(IMAGE_PATH, 'r') as file:
                 dataset = file["imgBrick"]
@@ -329,10 +329,10 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             last_image = image
 
         # Append current image number to the sequence list
-        image_sequence.append(trial['trial'])
+        image_sequence.append(trial['image'])
 
         # Logging the trial details
-        print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['trial']} {'(Oddball)' if is_oddball else ''}")
+        print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
 
         # Display the image
         image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
@@ -345,7 +345,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
 
         # Record a placeholder trigger
         # await record_trigger(99)
-        await record_trigger(trial['trial'], websocket, debug_mode=False)
+        await record_trigger(trial['image'], websocket, debug_mode=False)
 
         # Check if end of block
         if trial['end_of_block']:
@@ -421,7 +421,6 @@ async def main():
         # Wind down and save results
         await stop_record(websocket)
         await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
-        
         # Display completion message
         display_completion_message(window)
 
