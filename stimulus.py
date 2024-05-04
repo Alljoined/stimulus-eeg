@@ -92,6 +92,8 @@ async def setup_eeg(websocket):
         print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
         exit(1)
     cortex_token = response["result"]["cortexToken"]
+    # sometimes requires a delay after authorizing and creating a session
+    time.sleep(0.2)
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -150,6 +152,7 @@ async def teardown_eeg(websocket, subj, session):
     output_path = os.path.join("recordings", "subj_" + subj, "session_" + session)
     if not os.path.exists(output_path):
         os.makedirs(output_path)
+    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_path)
     response = await send_message({
         "id": 5,
         "jsonrpc": "2.0",

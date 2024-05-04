@@ -9,5 +9,7 @@ datasets--pscotti--mindeyev2/
 */coco_images_224_float16.hdf5
 tmp/edf/*.edf
 tmp/edf/*.json
+recordings/**/*.edf
+recordings/**/*.json
 
 .DS_Store
