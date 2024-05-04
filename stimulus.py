@@ -18,7 +18,7 @@ import scipy.io
 # Placeholder function for EEG setup and trigger recording
 load_dotenv()
 # IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-IMAGE_PATH = "nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
@@ -137,7 +137,19 @@ async def setup_eeg(websocket):
 async def teardown_eeg(websocket, subj, session):
     time.sleep(1)
     response = await send_message({
-        "id": 1,
+        "id": 2,
+        "jsonrpc": "2.0",
+        "method": "updateSession",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+            "session": headset_info["session_id"],
+            "status": "close"
+        }
+    }, websocket)
+    print("session closed:", response)
+    time.sleep(1)
+    response = await send_message({
+        "id": 3,
         "jsonrpc": "2.0",
         "method": "controlDevice",
         "params": {
@@ -153,8 +165,8 @@ async def teardown_eeg(websocket, subj, session):
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_path)
+    print("saving to directory:", output_path)
 
-    print(output_path)
     response = await send_message({
         "id": 5,
         "jsonrpc": "2.0",
