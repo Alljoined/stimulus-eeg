@@ -93,7 +93,7 @@ async def setup_eeg(websocket):
         exit(1)
     cortex_token = response["result"]["cortexToken"]
     # sometimes requires a delay after authorizing and creating a session
-    time.sleep(0.2)
+    await asyncio.sleep(0.2)
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -135,7 +135,7 @@ async def setup_eeg(websocket):
 
 
 async def teardown_eeg(websocket, subj, session):
-    time.sleep(1)
+    await asyncio.sleep(1)
     response = await send_message({
         "id": 2,
         "jsonrpc": "2.0",
@@ -147,7 +147,7 @@ async def teardown_eeg(websocket, subj, session):
         }
     }, websocket)
     print("session closed:", response)
-    time.sleep(1)
+    await asyncio.sleep(1)
     response = await send_message({
         "id": 3,
         "jsonrpc": "2.0",
@@ -158,7 +158,7 @@ async def teardown_eeg(websocket, subj, session):
         }
     }, websocket)
     print("headset disconnected:", response)
-    time.sleep(1)
+    await asyncio.sleep(1)
 
     # Save to output directory
     output_path = os.path.join("recordings", "subj_" + subj, "session_" + session)
@@ -182,7 +182,7 @@ async def teardown_eeg(websocket, subj, session):
             ]
         }
     }, websocket)
-    print("teardown response:", response)
+    print("export record response:", response)
 
 
 async def create_record(subj, session, websocket):
@@ -214,15 +214,16 @@ async def stop_record(websocket):
     if not headset_info["record_id"]:
         return
 
-    await send_message({
+    response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
         "method": "stopRecord",
         "params": {
             "cortexToken": headset_info["cortex_token"],
-            "record": headset_info["record_id"],
+            "session": headset_info["session_id"]
         }
     }, websocket)
+    print("stopping record:", response)
 
 
 async def record_trigger(trigger_number, websocket, debug_mode=True):
