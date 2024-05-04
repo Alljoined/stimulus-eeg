@@ -17,7 +17,8 @@ import scipy.io
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv()
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
@@ -254,7 +255,8 @@ def create_trials(n_images, n_oddballs, num_blocks):
             oddballs = [-1] * n_oddballs
             block_trials = images + oddballs
             random.shuffle(block_trials)
-            # ensure no two consecutive trials are the same
+            # ensure no two consecutive trials are the same.
+            # legacy code when we repeated images in a block
             isValidBlock = validate_block(block_trials)
 
         for idx, trial in enumerate(block_trials):
