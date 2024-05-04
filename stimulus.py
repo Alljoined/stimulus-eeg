@@ -64,6 +64,8 @@ async def setup_eeg(websocket):
         exit(1)
     # connect to the headset
     headset = response["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
+    with open('mapping.json', 'r') as file:
+        mapping = json.load(file)
     await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -71,13 +73,7 @@ async def setup_eeg(websocket):
         "params": {
             "command": "connect",
             "headset": headset,
-            "mappings": { # under the assumption that the headset is an EPOC Flex
-                "CMS": "F3",
-                "DRL": "F5",
-                "LA": "AF3",
-                "LB": "AF7",
-                "RA": "P8"
-            }
+            "mappings": mapping
         }
     }, websocket)
     response = await send_message({ # authorize the connection
@@ -156,6 +152,8 @@ async def teardown_eeg(websocket, subj, session):
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_path)
+
+    print(output_path)
     response = await send_message({
         "id": 5,
         "jsonrpc": "2.0",
