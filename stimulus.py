@@ -17,7 +17,8 @@ import scipy.io
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv()
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
@@ -254,7 +255,8 @@ def create_trials(n_images, n_oddballs, num_blocks):
             oddballs = [-1] * n_oddballs
             block_trials = images + oddballs
             random.shuffle(block_trials)
-            # ensure no two consecutive trials are the same
+            # ensure no two consecutive trials are the same.
+            # legacy code when we repeated images in a block
             isValidBlock = validate_block(block_trials)
 
         for idx, trial in enumerate(block_trials):
@@ -300,12 +302,11 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
     start_index = (current_block - 1) * n_images
     end_index = start_index + n_images
 
+    # Register the callback function for space presses
+    # keyboard.on_press(on_space_press)
+
     await create_record(subj, session, websocket)
     for idx, trial in enumerate(trials):
-        if 'escape' in event.getKeys():
-            print("Experiment terminated early.")
-            break
-
         if trial['block'] != current_block:
             current_block = trial['block']
             start_index = (current_block - 1) * n_images
@@ -322,9 +323,12 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             # Adjust index for 0-based Python indexing
             with h5py.File(IMAGE_PATH, 'r') as file:
                 dataset = file["imgBrick"]
-                image = dataset[nsd_id-1, :, :, :]  # Assuming index is within the valid range for dataset
-                image = Image.fromarray(image)
+                image = dataset[nsd_id-1, :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
+                image = Image.fromarray(image) # pyright: ignore
             last_image = image
+
+        # Record trigger
+        await record_trigger(trial['image'], websocket, debug_mode=False)
 
         # Append current image number to the sequence list
         image_sequence.append(trial['image'])
@@ -341,9 +345,26 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
         # Rest screen with a fixation cross
         display_cross_with_jitter(window, 0.3, 0.05)
 
-        # Record a placeholder trigger
-        # await record_trigger(99)
-        await record_trigger(trial['image'], websocket, debug_mode=False)
+        keys = event.getKeys()
+        # Terminate experiment early if escape is pressed
+        if 'escape' in keys:
+            print("Experiment terminated early.")
+            break
+
+        # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
+        space_pressed = 'space' in keys
+        if not is_oddball and not space_pressed:
+            print("No oddball, no space")
+            await record_trigger(120001, websocket, debug_mode=False)
+        elif not is_oddball and space_pressed:
+            print("No oddball, space")
+            await record_trigger(120002, websocket, debug_mode=False)
+        elif is_oddball and space_pressed:
+            print("Oddball, space")
+            await record_trigger(120003, websocket, debug_mode=False)
+        elif is_oddball and not space_pressed:
+            print("Oddball, no space")
+            await record_trigger(120004, websocket, debug_mode=False)
 
         # Check if end of block
         if trial['end_of_block']:
