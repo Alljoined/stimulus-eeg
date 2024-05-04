@@ -1,4 +1,3 @@
-import numpy as np
 from psychopy import visual, core, event, gui, data, logging
 import os
 from scipy.io import loadmat
@@ -13,9 +12,13 @@ import ssl
 import os
 import time
 from dotenv import load_dotenv # pip install python-dotenv
+import h5py
+import scipy.io
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv()
+IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -262,49 +265,6 @@ def create_trials(n_images, n_oddballs, num_blocks):
     return trials
 
 
-def load_images_from_mat(subj, session_number):
-    # Load the .mat file containing the images.
-    # The parameter 'simplify_cells=True' makes nested structures in the .mat file
-    # easier to access by converting them into nested dictionaries or arrays.
-    # This is particularly useful for MATLAB cell arrays and structures,
-    # allowing for more Pythonic access to the data.
-    # Note: 'simplify_cells' might not be available in all versions of SciPy.
-    # If you encounter an error with this parameter, ensure you are using a compatible version of SciPy,
-    # or you may need to manually navigate the nested structures without this parameter.
-    filename = f'processed-stimulus/coco_file_224_sub{subj}_ses{session_number}.mat'
-    loaded_data = loadmat(filename, simplify_cells=True)['coco_file']
-    images = []
-
-    # Iterate through each item in the loaded image data.
-    for i in range(len(loaded_data)):
-        # Access the image data. Given the structure noted, each 'img_data' should be directly
-        # an RGB image with the shape (224, 224, 3), meaning no additional reshaping or squeezing is needed.
-        img_data = loaded_data[i]
-        # Ensure the image data is in the expected uint8 format for image processing.
-        # This step converts the MATLAB image data into a format suitable for creating an image file.
-        img_array = np.uint8(img_data)
-
-        # Create a temporary PNG file for the current image.
-        # This temporary file is used to store the image data in a format that PsychoPy can display.
-        # The 'delete=False' argument prevents the file from being deleted as soon as it is closed,
-        # allowing us to use the file path for display in PsychoPy.
-        with NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-            Image.fromarray(img_array).save(tmp.name)
-            # Save the path to the temporary file for later use.
-            images.append(tmp.name)
-
-    # Print the total number of images
-    print(f"\nTotal number of images loaded: {len(images)} \n")
-    return images
-
-
-def select_block_images(all_images, block_number, n_images):
-    # Mod operator is used to ensure that blocks 9-16 are the same as block 1-8
-    start_index = ((block_number - 1) % 8) * n_images
-    end_index = start_index + n_images
-    return all_images[start_index:end_index]
-
-
 def display_instructions(window, session_number):
     instruction_text = (
         f"Welcome to session {session_number} of the study.\n\n"
@@ -324,14 +284,24 @@ def display_instructions(window, session_number):
     window.flip()
     event.waitKeys(keyList=['space'])
 
+def getNsdIndices(subj, session):
+    # Mapping from integer id to NSD id
+    mat = scipy.io.loadmat(EXP_PATH)
+    subjectim = mat['subjectim'] # 1-indexed
+    image_indices = subjectim[int(subj)-1][(int(session)-1)*4000 : int(session)*4000]
+    return image_indices
 
-async def run_experiment(trials, window, websocket, subj, session, n_images, all_images, img_width, img_height):
+async def run_experiment(trials, window, websocket, subj, session, n_images, img_width, img_height):
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
+    img_map = getNsdIndices(subj, session)
 
     # Create a record for the session
     current_block = 1  # Initialize the current block counter
+    start_index = (current_block - 1) * n_images
+    end_index = start_index + n_images
+
     await create_record(subj, session, websocket)
     for idx, trial in enumerate(trials):
         if 'escape' in event.getKeys():
@@ -344,16 +314,19 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, all
             end_index = start_index + n_images
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
-
-        block_images = select_block_images(all_images, trial['block'], n_images)
-        # Adjust index for 0-based Python indexing
-        image_path = block_images[trial['trial'] - 1]
+        
         # Check if this trial is an oddball
         is_oddball = (trial['trial'] == -1)
         if is_oddball:
-            image_path = last_image
+            image = last_image
         else:
-            last_image = image_path
+            nsd_id = img_map[start_index + trial['trial'] - 1] # Recall that trial and img_map is 1-indexed
+            # Adjust index for 0-based Python indexing
+            with h5py.File(IMAGE_PATH, 'r') as file:
+                dataset = file["imgBrick"]
+                image = dataset[nsd_id-1, :, :, :]  # Assuming index is within the valid range for dataset
+                image = Image.fromarray(image)
+            last_image = image
 
         # Append current image number to the sequence list
         image_sequence.append(trial['trial'])
@@ -362,7 +335,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, all
         print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['trial']} {'(Oddball)' if is_oddball else ''}")
 
         # Display the image
-        image_stim = visual.ImageStim(win=window, image=image_path, pos=(0, 0), size=(img_width, img_height))
+        image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
         image_stim.draw()
         window.flip()
         core.wait(0.3)  # Display time
@@ -386,7 +359,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, all
 
             # Create a new record for the next block
             current_block += 1
-            start_index = ((current_block - 1) % 8) * n_images
+            start_index = (current_block - 1) * n_images
             end_index = start_index + n_images
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
@@ -395,10 +368,6 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, all
     await teardown_eeg(websocket, subj, session)
     # Display completion message
     display_completion_message(window)
-
-    # Cleanup: Remove temporary image files
-    for img_path in all_images:
-        os.remove(img_path)
 
     window.close()
     core.quit()
@@ -434,12 +403,9 @@ async def main():
     dlg = gui.DlgFromDict(dictionary=participant_info, title='Experiment Info')
     if not dlg.OK:
         core.quit()
-
+        
     # Setup window
     window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
-
-    # Load and shuffle images before displaying instructions
-    all_images = load_images_from_mat(participant_info['Subject'], participant_info['Session'])
 
     # Display instructions
     display_instructions(window, participant_info['Session'])
@@ -458,7 +424,7 @@ async def main():
         trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
-        await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, all_images, img_width, img_height)
+        await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, img_width, img_height)
 
         # Save results
         # This is where you would implement saving the collected data
