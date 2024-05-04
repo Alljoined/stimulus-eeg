@@ -11,5 +11,6 @@ tmp/edf/*.edf
 tmp/edf/*.json
 recordings/**/*.edf
 recordings/**/*.json
+stimulus/nsd_stimuli.hdf5
 
 .DS_Store

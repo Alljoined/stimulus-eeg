@@ -14,12 +14,15 @@ import time
 from dotenv import load_dotenv # pip install python-dotenv
 import h5py
 import scipy.io
+import keyboard
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv()
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
+space_pressed = False
+listening_space_enabled = False
 
 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 localhost_pem = pathlib.Path(__file__).with_name("cert.pem")
@@ -242,6 +245,19 @@ def validate_block(block_trials):
     return True
 
 
+def on_space_press(event):
+    """Callback function to handle space bar presses."""
+    global space_pressed
+    if listening_space_enabled and event.name == 'space':
+        space_pressed = True
+
+
+def toggle_space_listener(state):
+    """Enable or disable the space bar listener."""
+    global listening_space_enabled
+    listening_space_enabled = state
+
+
 def create_trials(n_images, n_oddballs, num_blocks):
     trials = []
 
@@ -292,6 +308,7 @@ def getNsdIndices(subj, session):
     return image_indices
 
 async def run_experiment(trials, window, websocket, subj, session, n_images, img_width, img_height):
+    global space_pressed
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
@@ -301,6 +318,9 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
     current_block = 1  # Initialize the current block counter
     start_index = (current_block - 1) * n_images
     end_index = start_index + n_images
+
+    # Register the callback function for space presses
+    # keyboard.on_press(on_space_press)
 
     await create_record(subj, session, websocket)
     for idx, trial in enumerate(trials):
@@ -324,9 +344,15 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             # Adjust index for 0-based Python indexing
             with h5py.File(IMAGE_PATH, 'r') as file:
                 dataset = file["imgBrick"]
-                image = dataset[nsd_id-1, :, :, :]  # Assuming index is within the valid range for dataset
-                image = Image.fromarray(image)
+                image = dataset[nsd_id-1, :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
+                image = Image.fromarray(image) # pyright: ignore
             last_image = image
+
+        # Listen for space bar presses
+        toggle_space_listener(True)
+
+        # Record trigger
+        await record_trigger(trial['image'], websocket, debug_mode=False)
 
         # Append current image number to the sequence list
         image_sequence.append(trial['image'])
@@ -343,9 +369,25 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
         # Rest screen with a fixation cross
         display_cross_with_jitter(window, 0.3, 0.05)
 
-        # Record a placeholder trigger
-        # await record_trigger(99)
-        await record_trigger(trial['image'], websocket, debug_mode=False)
+        # Stop listening for space bar presses
+        toggle_space_listener(False)
+
+        # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
+        if not is_oddball and not space_pressed:
+            print("No oddball, no space")
+            await record_trigger(120001, websocket, debug_mode=False)
+        elif not is_oddball and space_pressed:
+            print("No oddball, space")
+            await record_trigger(120002, websocket, debug_mode=False)
+        elif is_oddball and space_pressed:
+            print("Oddball, space")
+            await record_trigger(120003, websocket, debug_mode=False)
+        elif is_oddball and not space_pressed:
+            print("Oddball, no space")
+            await record_trigger(120004, websocket, debug_mode=False)
+
+        # reset space_pressed
+        space_pressed = False
 
         # Check if end of block
         if trial['end_of_block']:
@@ -363,6 +405,9 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             end_index = start_index + n_images
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
+
+    # Clean up by unhooking the keyboard listener after use
+    # keyboard.unhook_all()
 
 
 def display_break_message(window, block_number):
