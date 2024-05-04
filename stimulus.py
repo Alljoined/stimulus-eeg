@@ -17,7 +17,8 @@ import scipy.io
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv()
-IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
@@ -64,6 +65,8 @@ async def setup_eeg(websocket):
         exit(1)
     # connect to the headset
     headset = response["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
+    with open('mapping.json', 'r') as file:
+        mapping = json.load(file)
     await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -71,13 +74,7 @@ async def setup_eeg(websocket):
         "params": {
             "command": "connect",
             "headset": headset,
-            "mappings": { # under the assumption that the headset is an EPOC Flex
-                "CMS": "F3",
-                "DRL": "F5",
-                "LA": "AF3",
-                "LB": "AF7",
-                "RA": "P8"
-            }
+            "mappings": mapping
         }
     }, websocket)
     response = await send_message({ # authorize the connection
@@ -156,6 +153,8 @@ async def teardown_eeg(websocket, subj, session):
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_path)
+
+    print(output_path)
     response = await send_message({
         "id": 5,
         "jsonrpc": "2.0",
@@ -256,7 +255,8 @@ def create_trials(n_images, n_oddballs, num_blocks):
             oddballs = [-1] * n_oddballs
             block_trials = images + oddballs
             random.shuffle(block_trials)
-            # ensure no two consecutive trials are the same
+            # ensure no two consecutive trials are the same.
+            # legacy code when we repeated images in a block
             isValidBlock = validate_block(block_trials)
 
         for idx, trial in enumerate(block_trials):
