@@ -364,14 +364,6 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
 
-    await stop_record(websocket)
-    await teardown_eeg(websocket, subj, session)
-    # Display completion message
-    display_completion_message(window)
-
-    window.close()
-    core.quit()
-
 
 def display_break_message(window, block_number):
     message = f"You've completed block {block_number}.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
@@ -403,7 +395,7 @@ async def main():
     dlg = gui.DlgFromDict(dictionary=participant_info, title='Experiment Info')
     if not dlg.OK:
         core.quit()
-        
+
     # Setup window
     window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
 
@@ -426,11 +418,15 @@ async def main():
         # Run the experiment
         await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, img_width, img_height)
 
-        # Save results
-        # This is where you would implement saving the collected data
-        # e.g., response times, accuracy, etc., to a file
-        # this would be the ideal place to put the teardown_eeg function
-        # but for some reason the code doesn't get to here
+        # Wind down and save results
+        await stop_record(websocket)
+        await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
+        
+        # Display completion message
+        display_completion_message(window)
+
+        window.close()
+        core.quit()
 
 
 if __name__ == '__main__':
