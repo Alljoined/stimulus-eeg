@@ -27,10 +27,10 @@ localhost_pem = pathlib.Path(__file__).with_name("cert.pem")
 ssl_context.load_verify_locations(localhost_pem)
 
 async def send_message(message, websocket):
-        message_json = json.dumps(message)
-        await websocket.send(message_json)
-        response = await websocket.recv()
-        return json.loads(response)
+    message_json = json.dumps(message)
+    await websocket.send(message_json)
+    response = await websocket.recv()
+    return json.loads(response)
 
 async def setup_eeg(websocket):
     # Initialize EEG, e.g., with Emotiv SDK
@@ -438,8 +438,8 @@ async def main():
         await setup_eeg(websocket)
 
         # Parameters
-        n_images = 10  # Number of unique images per block
-        n_oddballs = 2  # Number of oddball images per block
+        n_images = 208  # Number of unique images per block
+        n_oddballs = 24  # Number of oddball images per block
         num_blocks = 16  # Number of blocks
         img_width, img_height = 425, 425  # Define image dimensions
         window_size = window.size
