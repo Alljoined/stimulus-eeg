@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Create a `.env` file based off of [.env.template](./.env.template)
+1. Create a `.env` file based off of [.env.template](./.env.template). Go to [cortex dashboard](https://account.emotiv.com/my-account/cortex-apps/) to get an env key.
 2. Create a file called `cert.pem` containing the contents from [this](https://github.com/Emotiv/cortex-example/blob/master/certificates/rootCA.pem)
 3. Install all [requirements](./requirements.txt)
 4. Download `coco_file_224_sub1_ses1.mat` and put it into a folder called `processed-stimulus`

@@ -16,9 +16,9 @@ import h5py
 import scipy.io
 
 # Placeholder function for EEG setup and trigger recording
-load_dotenv()
-# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+load_dotenv(override=True)
+IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
@@ -27,10 +27,22 @@ localhost_pem = pathlib.Path(__file__).with_name("cert.pem")
 ssl_context.load_verify_locations(localhost_pem)
 
 async def send_message(message, websocket):
-        message_json = json.dumps(message)
-        await websocket.send(message_json)
-        response = await websocket.recv()
-        return json.loads(response)
+    attempt = 0
+    retries = 3
+    while attempt < retries:
+        try:
+            message_json = json.dumps(message)
+            await websocket.send(message_json)
+            response = await websocket.recv()
+            return json.loads(response)
+        except (websockets.exceptions.ConnectionClosedError, websockets.exceptions.WebSocketException) as e:
+            attempt += 1
+            print(f"Attempt {attempt}: Failed to communicate with WebSocket server - {e}")
+            if attempt >= retries:
+                print("Maximum retry attempts reached. Stopping.")
+                return None
+            await asyncio.sleep(1)  # Wait a bit before retrying
+    return None
 
 async def setup_eeg(websocket):
     # Initialize EEG, e.g., with Emotiv SDK
@@ -92,6 +104,15 @@ async def setup_eeg(websocket):
         print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
         exit(1)
     cortex_token = response["result"]["cortexToken"]
+    # Liscense info
+    # response = await send_message({
+    #     "id": 1,
+    #     "jsonrpc": "2.0",
+    #     "method": "getLicenseInfo",
+    #     "params": {
+    #         "cortexToken": cortex_token
+    #     }
+    # }, websocket)
     # sometimes requires a delay after authorizing and creating a session
     time.sleep(0.2)
     response = await send_message({
@@ -196,6 +217,8 @@ async def create_record(subj, session, websocket):
             "title": f"Subject {subj}, Session {session} Recording"
         }
     }, websocket)
+    print("AAGAGA")
+    print(response)
     record_id = response["result"]["record"]["uuid"]
     headset_info["record_id"] = record_id
     headset_info["record_ids"].append(record_id)
@@ -438,8 +461,8 @@ async def main():
         await setup_eeg(websocket)
 
         # Parameters
-        n_images = 10  # Number of unique images per block
-        n_oddballs = 2  # Number of oddball images per block
+        n_images = 208  # Number of unique images per block
+        n_oddballs = 24  # Number of oddball images per block
         num_blocks = 16  # Number of blocks
         img_width, img_height = 425, 425  # Define image dimensions
         window_size = window.size
