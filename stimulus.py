@@ -19,9 +19,10 @@ import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
+EMOTIV_ON = False
 headset_info = {} # update this with the headset info
 
 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -380,7 +381,8 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
     # Register the callback function for space presses
     # keyboard.on_press(on_space_press)
 
-    await create_record(subj, session, websocket)
+    if EMOTIV_ON:
+        await create_record(subj, session, websocket)
     for idx, trial in enumerate(trials):
         if trial['block'] != current_block:
             current_block = trial['block']
@@ -501,30 +503,34 @@ async def main():
     # Lenovo external monitor   
     # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
+    # Parameters
+    n_images = 10  # Number of unique images per block
+    n_oddballs = 2  # Number of oddball images per block
+    num_blocks = 16  # Number of blocks
+    img_width, img_height = 425, 425  # Define image dimensions
+    window_size = window.size
+
     # Display instructions
     display_instructions(window, participant_info['Session'])
 
     # Setup EEG
     async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
-        await setup_eeg(websocket)
-
-        # Parameters
-        n_images = 208  # Number of unique images per block
-        n_oddballs = 24  # Number of oddball images per block
-        num_blocks = 16  # Number of blocks
-        img_width, img_height = 425, 425  # Define image dimensions
-        window_size = window.size
-
+        if EMOTIV_ON:
+            await setup_eeg(websocket)
         trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
-        experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height))
-        recording_task = asyncio.create_task(process_triggers(websocket))
-        await asyncio.gather(experiment_task, recording_task)
+        if EMOTIV_ON:
+            experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height))
+            recording_task = asyncio.create_task(process_triggers(websocket))
+            await asyncio.gather(experiment_task, recording_task)
+        else: 
+            await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height)
 
         # Wind down and save results
-        await stop_record(websocket)
-        await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
+        if EMOTIV_ON:
+            await stop_record(websocket)
+            await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
         # Display completion message
         display_completion_message(window)
 
