@@ -1,4 +1,5 @@
 from psychopy import visual, core, event, gui, logging
+from psychopy.monitors import Monitor
 from datetime import datetime, timezone, timedelta
 import os
 from scipy.io import loadmat
@@ -14,6 +15,7 @@ import os
 import time
 from dotenv import load_dotenv # pip install python-dotenv
 import h5py
+import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
@@ -334,18 +336,41 @@ def display_instructions(window, session_number):
     window.flip()
     event.waitKeys(keyList=['space'])
 
-def getNsdIndices(subj, session):
+
+def getNsdIndices(subj, session, n_images, num_blocks):
+    totalImages = n_images * num_blocks
     # Mapping from integer id to NSD id
     mat = loadmat(EXP_PATH)
     subjectim = mat['subjectim'] # 1-indexed
-    image_indices = subjectim[int(subj)-1][(int(session)-1)*4000 : int(session)*4000]
+    image_indices = subjectim[int(subj)-1][(int(session)-1)*totalImages : int(session)*totalImages]
     return image_indices
 
-async def run_experiment(trials, window, websocket, subj, session, n_images, img_width, img_height):
+
+def getImages(subj, session, n_images, num_blocks):
+    totalImages = n_images * num_blocks
+    # Mapping from integer id to NSD id
+    mat = loadmat(EXP_PATH)
+    subjectim = mat['subjectim'] # 1-indexed
+
+    image_indices = subjectim[int(subj)-1][(int(session)-1)*totalImages : int(session)*totalImages]
+    image_indices = image_indices -1 # img_map is 1-indexed
+    sorted_indices = np.argsort(image_indices)
+    inverse_indices = np.argsort(sorted_indices)  # To revert back to original order
+
+    with h5py.File(IMAGE_PATH, 'r') as file:
+        dataset = file["imgBrick"]
+        img_map = getNsdIndices(subj, session, n_images, num_blocks)
+        img_map = img_map -1 # img_map is 1-indexed
+        sorted_images = dataset[img_map[sorted_indices], :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
+        images: any = sorted_images[inverse_indices] # pyright: ignore
+        pil_images = [Image.fromarray(img) for img in images] # pyright: ignore
+    return pil_images
+
+async def run_experiment(trials, window, websocket, subj, session, n_images, num_blocks, img_width, img_height):
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
-    img_map = getNsdIndices(subj, session)
+    images = getImages(subj, session, n_images, num_blocks)
 
     # Create a record for the session
     current_block = 1  # Initialize the current block counter
@@ -369,12 +394,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
         if is_oddball:
             image = last_image
         else:
-            nsd_id = img_map[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
-            # Adjust index for 0-based Python indexing
-            with h5py.File(IMAGE_PATH, 'r') as file:
-                dataset = file["imgBrick"]
-                image = dataset[nsd_id-1, :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
-                image = Image.fromarray(image) # pyright: ignore
+            image = images[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
             last_image = image
 
         # Record trigger
@@ -469,10 +489,17 @@ async def main():
     if not dlg.OK:
         core.quit()
 
+    # Monitor setup
+    my_monitor = Monitor(name='Q27q-1L')
+    my_monitor.setWidth(61.42)       # Monitor width in centimeters (physical size of screen)
+    my_monitor.setDistance(80)    # Viewing distance in centimeters
+    my_monitor.setSizePix((2560, 1440))  # Resolution in pixels
+    my_monitor.save()
+
     # Default
-    # window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
-    # Lenovo external monitor
-    window = visual.Window(screen=1, fullscr=True, size=[2560, 1440], color=[0, 0, 0], units='pix')
+    window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
+    # Lenovo external monitor   
+    # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
     # Display instructions
     display_instructions(window, participant_info['Session'])
@@ -491,7 +518,7 @@ async def main():
         trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
-        experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, img_width, img_height))
+        experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height))
         recording_task = asyncio.create_task(process_triggers(websocket))
         await asyncio.gather(experiment_task, recording_task)
 
