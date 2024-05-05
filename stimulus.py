@@ -497,7 +497,7 @@ async def main():
     my_monitor.save()
 
     # Default
-    window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
+    window = visual.Window(fullscr=True, color=[0, 0, 0], units='pix')
     # Lenovo external monitor   
     # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
