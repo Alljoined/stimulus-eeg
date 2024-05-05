@@ -351,8 +351,8 @@ def getImages(subj, session, n_images, num_blocks):
     # Mapping from integer id to NSD id
     mat = loadmat(EXP_PATH)
     subjectim = mat['subjectim'] # 1-indexed
-
-    image_indices = subjectim[int(subj)-1][(int(session)-1)*totalImages : int(session)*totalImages]
+    sessionGroup = (int(session)-1) % 3
+    image_indices = subjectim[int(subj)-1][sessionGroup*totalImages : (sessionGroup + 1)*totalImages]
     image_indices = image_indices -1 # img_map is 1-indexed
     sorted_indices = np.argsort(image_indices)
     inverse_indices = np.argsort(sorted_indices)  # To revert back to original order
