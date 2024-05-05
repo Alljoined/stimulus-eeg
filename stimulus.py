@@ -1,9 +1,11 @@
-from psychopy import visual, core, event, gui, data, logging
+from psychopy import visual, core, event, gui, logging
+from datetime import datetime, timezone, timedelta
 import os
 from scipy.io import loadmat
 from PIL import Image
 import random
 import asyncio
+from asyncio import Queue
 import pathlib
 import websockets # pip install websocket-client
 import json
@@ -15,8 +17,8 @@ import h5py
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 headset_info = {} # update this with the headset info
 
@@ -38,9 +40,9 @@ async def send_message(message, websocket):
             print(f"Attempt {attempt}: Failed to communicate with WebSocket server - {e}")
             if attempt >= retries:
                 print("Maximum retry attempts reached. Stopping.")
-                return None
+                return {}
             await asyncio.sleep(1)  # Wait a bit before retrying
-    return None
+    return {}
 
 async def setup_eeg(websocket):
     # Initialize EEG, e.g., with Emotiv SDK
@@ -247,11 +249,13 @@ async def stop_record(websocket):
     print("stopping record:", response)
 
 
-async def record_trigger(trigger_number, websocket, debug_mode=True):
+async def record_trigger(trigger_number, time, websocket, debug_mode=True):
     if debug_mode:
         logging.log(level=logging.DATA,
                     msg=f"Trigger recorded: {trigger_number}")
     else:
+        timeUTC = datetime.fromtimestamp(time/1000, timezone.utc)
+        print("Recording trigger", trigger_number, "at time", timeUTC)
         response = await send_message({
             "id": 1,
             "jsonrpc": "2.0",
@@ -259,11 +263,23 @@ async def record_trigger(trigger_number, websocket, debug_mode=True):
             "params": {
                 "cortexToken": headset_info["cortex_token"],
                 "session": headset_info["session_id"],
-                "time": time.time() * 1000,
+                "time": time,
                 "label": "TRIGGER",
                 "value": trigger_number if trigger_number >= 0 else trigger_number * -100000
             }
         }, websocket)
+        # print("trigger response:", response)
+
+
+message_queue = Queue()
+async def process_triggers(websocket):
+    """Continuously receive and add messages to the queue."""
+    while True:
+        message = await message_queue.get()
+        if message is None:
+            break
+        await record_trigger(message['trigger_number'], message['time'], websocket, False)
+        message_queue.task_done()
 
 
 def validate_block(block_trials):
@@ -362,7 +378,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             last_image = image
 
         # Record trigger
-        await record_trigger(trial['image'], websocket, debug_mode=False)
+        await message_queue.put({'trigger_number': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
 
         # Append current image number to the sequence list
         image_sequence.append(trial['image'])
@@ -374,7 +390,8 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
         image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
         image_stim.draw()
         window.flip()
-        core.wait(0.3)  # Display time
+        await asyncio.sleep(0.3)
+        # core.wait(0.3)  # Display time
 
         # Rest screen with a fixation cross
         display_cross_with_jitter(window, 0.3, 0.05)
@@ -389,16 +406,16 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
         space_pressed = 'space' in keys
         if not is_oddball and not space_pressed:
             print("No oddball, no space")
-            await record_trigger(120001, websocket, debug_mode=False)
+            await message_queue.put({'trigger_number': 120001, 'time': time.time() * 1000})
         elif not is_oddball and space_pressed:
             print("No oddball, space")
-            await record_trigger(120002, websocket, debug_mode=False)
+            await message_queue.put({'trigger_number': 120002, 'time': time.time() * 1000})
         elif is_oddball and space_pressed:
             print("Oddball, space")
-            await record_trigger(120003, websocket, debug_mode=False)
+            await message_queue.put({'trigger_number': 120003, 'time': time.time() * 1000})
         elif is_oddball and not space_pressed:
             print("Oddball, no space")
-            await record_trigger(120004, websocket, debug_mode=False)
+            await message_queue.put({'trigger_number': 120004, 'time': time.time() * 1000})
 
         # Check if end of block
         if trial['end_of_block']:
@@ -416,6 +433,9 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, img
             end_index = start_index + n_images
             print(f"\nBlock {current_block}, Start Index: {start_index}")
             print(f"Block {current_block}, End Index: {end_index}\n")
+
+    # Stop the consumer task
+    await message_queue.put(None)
 
 
 def display_break_message(window, block_number):
@@ -471,7 +491,9 @@ async def main():
         trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
-        await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, img_width, img_height)
+        experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, img_width, img_height))
+        recording_task = asyncio.create_task(process_triggers(websocket))
+        await asyncio.gather(experiment_task, recording_task)
 
         # Wind down and save results
         await stop_record(websocket)
