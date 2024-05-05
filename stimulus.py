@@ -2,7 +2,6 @@ from psychopy import visual, core, event, gui, data, logging
 import os
 from scipy.io import loadmat
 from PIL import Image
-from tempfile import NamedTemporaryFile
 import random
 import asyncio
 import pathlib
@@ -13,7 +12,6 @@ import os
 import time
 from dotenv import load_dotenv # pip install python-dotenv
 import h5py
-import scipy.io
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
@@ -322,7 +320,7 @@ def display_instructions(window, session_number):
 
 def getNsdIndices(subj, session):
     # Mapping from integer id to NSD id
-    mat = scipy.io.loadmat(EXP_PATH)
+    mat = loadmat(EXP_PATH)
     subjectim = mat['subjectim'] # 1-indexed
     image_indices = subjectim[int(subj)-1][(int(session)-1)*4000 : int(session)*4000]
     return image_indices
@@ -451,8 +449,10 @@ async def main():
     if not dlg.OK:
         core.quit()
 
-    # Setup window
-    window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
+    # Default
+    # window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
+    # Lenovo external monitor
+    window = visual.Window(screen=1, fullscr=True, size=[2560, 1440], color=[0, 0, 0], units='pix')
 
     # Display instructions
     display_instructions(window, participant_info['Session'])
