@@ -20,8 +20,8 @@ import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 EMOTIV_ON = True
 headset_info = {} # update this with the headset info
@@ -505,9 +505,9 @@ async def main():
     # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
     # Parameters
-    n_images = 10  # Number of unique images per block
-    n_oddballs = 2  # Number of oddball images per block
-    num_blocks = 16  # Number of blocks
+    n_images = 208  # Number of unique images per block
+    n_oddballs = 24  # Number of oddball images per block
+    num_blocks = 8  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
     window_size = window.size
 
@@ -540,4 +540,9 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()
+    #asyncio.run(main())
