@@ -337,16 +337,6 @@ def display_instructions(window, session_number):
     window.flip()
     event.waitKeys(keyList=['space'])
 
-
-def getNsdIndices(subj, session, n_images, num_blocks):
-    totalImages = n_images * num_blocks
-    # Mapping from integer id to NSD id
-    mat = loadmat(EXP_PATH)
-    subjectim = mat['subjectim'] # 1-indexed
-    image_indices = subjectim[int(subj)-1][(int(session)-1)*totalImages : int(session)*totalImages]
-    return image_indices
-
-
 def getImages(subj, session, n_images, num_blocks):
     totalImages = n_images * num_blocks
     # Mapping from integer id to NSD id
@@ -360,11 +350,9 @@ def getImages(subj, session, n_images, num_blocks):
 
     with h5py.File(IMAGE_PATH, 'r') as file:
         dataset = file["imgBrick"]
-        img_map = getNsdIndices(subj, session, n_images, num_blocks)
-        img_map = img_map -1 # img_map is 1-indexed
-        sorted_images = dataset[img_map[sorted_indices], :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
-        images: any = sorted_images[inverse_indices] # pyright: ignore
-        pil_images = [Image.fromarray(img) for img in images] # pyright: ignore
+        sorted_images = dataset[image_indices[sorted_indices], :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
+        images = sorted_images[inverse_indices]
+        pil_images = [Image.fromarray(img) for img in images]
     return pil_images
 
 async def run_experiment(trials, window, websocket, subj, session, n_images, num_blocks, img_width, img_height):
@@ -372,6 +360,8 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
     images = getImages(subj, session, n_images, num_blocks)
+    print(subj, session, n_images, num_blocks)
+    print(np.array(images[0])[0])
 
     # Create a record for the session
     current_block = 1  # Initialize the current block counter
