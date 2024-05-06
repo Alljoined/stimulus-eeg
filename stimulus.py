@@ -446,7 +446,8 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             image_sequence = []
 
             # Display break message at the end of each block
-            display_break_message(window, trial['block'])
+            break_message = f"You've completed block {trial['block']}.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
+            display_message(window, break_message, block=True)
 
             # Create a new record for the next block
             current_block += 1
@@ -458,21 +459,12 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
     # Stop the consumer task
     await message_queue.put(None)
 
-
-def display_break_message(window, block_number):
-    message = f"You've completed block {block_number}.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
-    break_message = visual.TextStim(window, text=message, pos=(0, 0), color=(1, 1, 1), height=40, wrapWidth=window.size[0] * 0.8)
-    break_message.draw()
-    window.flip()
-    event.waitKeys(keyList=['space'])
-
-
-def display_completion_message(window):
-    completion_text = "Congratulations! You have completed the experiment.\n\nPress the space bar to exit."
-    completion_message = visual.TextStim(window, text=completion_text, pos=(0, 0), color=(1, 1, 1), height=40, wrapWidth=window.size[0] * 0.8)
+def display_message(window, text, block=False):
+    completion_message = visual.TextStim(window, text=text, pos=(0, 0), color=(1, 1, 1), height=40, wrapWidth=window.size[0] * 0.8)
     completion_message.draw()
     window.flip()
-    event.waitKeys(keyList=['space'])
+    if block:
+        event.waitKeys(keyList=['space'])
 
 
 def display_cross_with_jitter(window, base_time, jitter):
@@ -517,7 +509,9 @@ async def main():
     # Setup EEG
     async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
         if EMOTIV_ON:
+            display_message(window, "Connecting to headset...", block=False)
             await setup_eeg(websocket)
+        display_message(window, "Preparing images...", block=False)
         trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
@@ -530,10 +524,13 @@ async def main():
 
         # Wind down and save results
         if EMOTIV_ON:
+            display_message(window, "Stop recording...", block=False)
             await stop_record(websocket)
+            display_message(window, "Saving recording...", block=False)
             await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
         # Display completion message
-        display_completion_message(window)
+        completion_text = "Congratulations! You have completed the experiment.\n\nPress the space bar to exit."
+        display_message(window, completion_text, block=True)
 
         window.close()
         core.quit()
