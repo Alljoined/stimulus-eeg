@@ -1,6 +1,7 @@
 from psychopy import visual, core, event, gui, logging
 from psychopy.monitors import Monitor
-from datetime import datetime, timezone, timedelta
+from psychopy.clock import Clock
+
 import os
 from scipy.io import loadmat
 from PIL import Image
@@ -22,12 +23,18 @@ load_dotenv(override=True)
 IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
 # IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
-EMOTIV_ON = False
+EMOTIV_ON = True
 headset_info = {} # update this with the headset info
 
+# Networking
 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 localhost_pem = pathlib.Path(__file__).with_name("cert.pem")
 ssl_context.load_verify_locations(localhost_pem)
+
+# Clock
+experiment_start_time = time.time()
+global_clock = Clock()
+global_clock.reset()
 
 async def send_message(message, websocket):
     attempt = 0
@@ -198,7 +205,7 @@ async def teardown_eeg(websocket, subj, session):
         "params": {
             "cortexToken": headset_info["cortex_token"],
             "folder": output_path,
-            "format": "EDF",
+            "format": "EDFPLUS",
             "recordIds": headset_info["record_ids"],
             "streamTypes": [
                 "EEG",
@@ -220,8 +227,6 @@ async def create_record(subj, session, websocket):
             "title": f"Subject {subj}, Session {session} Recording"
         }
     }, websocket)
-    print("AAGAGA")
-    print(response)
     record_id = response["result"]["record"]["uuid"]
     headset_info["record_id"] = record_id
     headset_info["record_ids"].append(record_id)
@@ -252,26 +257,22 @@ async def stop_record(websocket):
     print("stopping record:", response)
 
 
-async def record_trigger(trigger_number, time, websocket, debug_mode=True):
+async def record_trigger(message, websocket, debug_mode=False):
     if debug_mode:
-        logging.log(level=logging.DATA,
-                    msg=f"Trigger recorded: {trigger_number}")
+        logging.log(level=logging.DATA, msg=f"Trigger recorded: {message['label']} {message['value']}")
     else:
-        timeUTC = datetime.fromtimestamp(time/1000, timezone.utc)
-        print("Recording trigger", trigger_number, "at time", timeUTC)
-        response = await send_message({
+        await send_message({
             "id": 1,
             "jsonrpc": "2.0",
             "method": "injectMarker",
             "params": {
                 "cortexToken": headset_info["cortex_token"],
                 "session": headset_info["session_id"],
-                "time": time,
-                "label": "TRIGGER",
-                "value": trigger_number if trigger_number >= 0 else trigger_number * -100000
+                "time": message['time'],
+                "label": message['label'],
+                "value": message['value']
             }
         }, websocket)
-        # print("trigger response:", response)
 
 
 message_queue = Queue()
@@ -281,7 +282,8 @@ async def process_triggers(websocket):
         message = await message_queue.get()
         if message is None:
             break
-        await record_trigger(message['trigger_number'], message['time'], websocket, False)
+        print(message)
+        await record_trigger(message, websocket, False)
         message_queue.task_done()
 
 
@@ -361,7 +363,6 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
     image_sequence = []
     images = getImages(subj, session, n_images, num_blocks)
     print(subj, session, n_images, num_blocks)
-    print(np.array(images[0])[0])
 
     # Create a record for the session
     current_block = 1  # Initialize the current block counter
@@ -378,8 +379,8 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             current_block = trial['block']
             start_index = (current_block - 1) * n_images
             end_index = start_index + n_images
-            print(f"\nBlock {current_block}, Start Index: {start_index}")
-            print(f"Block {current_block}, End Index: {end_index}\n")
+            # print(f"\nBlock {current_block}, Start Index: {start_index}")
+            # print(f"Block {current_block}, End Index: {end_index}\n")
         
         # Check if this trial is an oddball
         is_oddball = (trial['image'] == -1)
@@ -389,45 +390,54 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             image = images[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
             last_image = image
 
-        # Record trigger
-        await message_queue.put({'trigger_number': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
-
+        
         # Append current image number to the sequence list
         image_sequence.append(trial['image'])
 
         # Logging the trial details
-        print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
+        # print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
 
-        # Display the image
+        # Prepare the image
         image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
         image_stim.draw()
+        # Send trigger
+        await message_queue.put({'label': 'stim', 'value': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
+        # Display the image
         window.flip()
         await asyncio.sleep(0.3)
-        # core.wait(0.3)  # Display time
 
         # Rest screen with a fixation cross
         display_cross_with_jitter(window, 0.3, 0.05)
 
-        keys = event.getKeys()
-        # Terminate experiment early if escape is pressed
-        if 'escape' in keys:
+        keys = event.getKeys(keyList=["escape", "space"], timeStamped=global_clock)
+
+        escape_pressed = False
+        space_pressed = False
+        space_time = None
+        for key, timestamp in keys:
+            if key == "escape":
+                escape_pressed = True
+            elif key == "space":
+                space_pressed = True
+                space_time = (experiment_start_time + timestamp) * 1000
+        
+        if escape_pressed: # Terminate experiment early if escape is pressed
             print("Experiment terminated early.")
             break
 
         # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
-        space_pressed = 'space' in keys
         if not is_oddball and not space_pressed:
-            print("No oddball, no space")
-            await message_queue.put({'trigger_number': 120001, 'time': time.time() * 1000})
+            # print("No oddball, no space")
+            await message_queue.put({'label': 'behav', 'value': 0, 'time': time.time() * 1000})
         elif not is_oddball and space_pressed:
-            print("No oddball, space")
-            await message_queue.put({'trigger_number': 120002, 'time': time.time() * 1000})
+            # print("No oddball, space")
+            await message_queue.put({'label': 'behav', 'value': 1, 'time': space_time})
         elif is_oddball and space_pressed:
-            print("Oddball, space")
-            await message_queue.put({'trigger_number': 120003, 'time': time.time() * 1000})
+            # print("Oddball, space")
+            await message_queue.put({'label': 'behav', 'value': 2, 'time': space_time})
         elif is_oddball and not space_pressed:
-            print("Oddball, no space")
-            await message_queue.put({'trigger_number': 120004, 'time': time.time() * 1000})
+            # print("Oddball, no space")
+            await message_queue.put({'label': 'behav', 'value': 3, 'time': time.time() * 1000})
 
         # Check if end of block
         if trial['end_of_block']:
