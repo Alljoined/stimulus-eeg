@@ -177,7 +177,7 @@ async def teardown_eeg(websocket, subj, session):
             "status": "close"
         }
     }, websocket)
-    print("session closed:", response)
+    # print("session closed:", response)
     await asyncio.sleep(1)
     response = await send_message({
         "id": 3,
@@ -188,7 +188,7 @@ async def teardown_eeg(websocket, subj, session):
             "headset": headset_info["headset"]
         }
     }, websocket)
-    print("headset disconnected:", response)
+    # print("headset disconnected:", response)
     await asyncio.sleep(1)
 
     # Save to output directory
@@ -282,7 +282,6 @@ async def process_triggers(websocket):
         message = await message_queue.get()
         if message is None:
             break
-        print(message)
         await record_trigger(message, websocket, False)
         message_queue.task_done()
 
