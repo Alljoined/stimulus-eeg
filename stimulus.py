@@ -20,8 +20,8 @@ import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 EMOTIV_ON = True
 headset_info = {} # update this with the headset info
