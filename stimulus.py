@@ -476,8 +476,10 @@ def display_cross_with_jitter(window, base_time, jitter):
 
 async def main():
     # Experiment setup
-    participant_info = {'Subject': '', 'Session': '1'}
+    # TODO: Fix order to be subject, session
+    participant_info = {'Subject': '', 'Session': ''}
     dlg = gui.DlgFromDict(dictionary=participant_info, title='Experiment Info')
+
     if not dlg.OK:
         core.quit()
 
