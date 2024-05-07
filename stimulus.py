@@ -22,7 +22,7 @@ load_dotenv(override=True)
 # IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
 IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
-EMOTIV_ON = False
+EMOTIV_ON = True
 headset_info = {} # update this with the headset info
 
 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -158,34 +158,34 @@ async def setup_eeg(websocket):
     }, websocket)
 
 
-async def teardown_eeg(websocket, subj, session):
-    await asyncio.sleep(1)
-    response = await send_message({
-        "id": 2,
-        "jsonrpc": "2.0",
-        "method": "updateSession",
-        "params": {
-            "cortexToken": headset_info["cortex_token"],
-            "session": headset_info["session_id"],
-            "status": "close"
-        }
-    }, websocket)
-    print("session closed:", response)
-    await asyncio.sleep(1)
-    response = await send_message({
-        "id": 3,
-        "jsonrpc": "2.0",
-        "method": "controlDevice",
-        "params": {
-            "command": "disconnect",
-            "headset": headset_info["headset"]
-        }
-    }, websocket)
-    print("headset disconnected:", response)
+async def teardown_eeg(websocket, subj, session, block):
+    # await asyncio.sleep(1)
+    # response = await send_message({
+    #     "id": 2,
+    #     "jsonrpc": "2.0",
+    #     "method": "updateSession",
+    #     "params": {
+    #         "cortexToken": headset_info["cortex_token"],
+    #         "session": headset_info["session_id"],
+    #         "status": "close"
+    #     }
+    # }, websocket)
+    # print("session closed:", response)
+    # await asyncio.sleep(1)
+    # response = await send_message({
+    #     "id": 3,
+    #     "jsonrpc": "2.0",
+    #     "method": "controlDevice",
+    #     "params": {
+    #         "command": "disconnect",
+    #         "headset": headset_info["headset"]
+    #     }
+    # }, websocket)
+    # print("headset disconnected:", response)
     await asyncio.sleep(1)
 
     # Save to output directory
-    output_path = os.path.join("recordings", "subj_" + subj, "session_" + session)
+    output_path = os.path.join("recordings", "subj_" + subj, "session_" + session, "block_" + str(block))
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_path)
@@ -209,7 +209,7 @@ async def teardown_eeg(websocket, subj, session):
     print("export record response:", response)
 
 
-async def create_record(subj, session, websocket):
+async def create_record(subj, session, block, websocket):
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -217,10 +217,9 @@ async def create_record(subj, session, websocket):
         "params": {
             "cortexToken": headset_info["cortex_token"],
             "session": headset_info["session_id"],
-            "title": f"Subject {subj}, Session {session} Recording"
+            "title": f"Subject {subj}, Session {session}, Block {block} Recording"
         }
     }, websocket)
-    print("AAGAGA")
     print(response)
     record_id = response["result"]["record"]["uuid"]
     headset_info["record_id"] = record_id
@@ -370,81 +369,104 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
 
     # Register the callback function for space presses
     # keyboard.on_press(on_space_press)
+    try:
+        if EMOTIV_ON:
+            await create_record(subj, session, current_block, websocket)
 
-    if EMOTIV_ON:
-        await create_record(subj, session, websocket)
-    for idx, trial in enumerate(trials):
-        if trial['block'] != current_block:
-            current_block = trial['block']
-            start_index = (current_block - 1) * n_images
-            end_index = start_index + n_images
-            print(f"\nBlock {current_block}, Start Index: {start_index}")
-            print(f"Block {current_block}, End Index: {end_index}\n")
-        
-        # Check if this trial is an oddball
-        is_oddball = (trial['image'] == -1)
-        if is_oddball:
-            image = last_image
-        else:
-            image = images[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
-            last_image = image
+        for idx, trial in enumerate(trials):
+            # if EMOTIV_ON:
+            #     await create_record(subj, session, current_block, websocket)
 
-        # Record trigger
-        await message_queue.put({'trigger_number': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
+            if trial['block'] != current_block:
+                current_block = trial['block']
+                start_index = (current_block - 1) * n_images
+                end_index = start_index + n_images
+                print(f"\nBlock {current_block}, Start Index: {start_index}")
+                print(f"Block {current_block}, End Index: {end_index}\n")
+            
+            # Check if this trial is an oddball
+            is_oddball = (trial['image'] == -1)
+            if is_oddball:
+                image = last_image
+            else:
+                image = images[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
+                last_image = image
 
-        # Append current image number to the sequence list
-        image_sequence.append(trial['image'])
+            # Record trigger
+            await message_queue.put({'trigger_number': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
 
-        # Logging the trial details
-        print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
+            # Append current image number to the sequence list
+            image_sequence.append(trial['image'])
 
-        # Display the image
-        image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
-        image_stim.draw()
-        window.flip()
-        await asyncio.sleep(0.3)
-        # core.wait(0.3)  # Display time
+            # Logging the trial details
+            print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
 
-        # Rest screen with a fixation cross
-        display_cross_with_jitter(window, 0.3, 0.05)
+            # Display the image
+            image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
+            image_stim.draw()
+            window.flip()
+            await asyncio.sleep(0.3)
+            # core.wait(0.3)  # Display time
 
-        keys = event.getKeys()
-        # Terminate experiment early if escape is pressed
-        if 'escape' in keys:
-            print("Experiment terminated early.")
-            break
+            # Rest screen with a fixation cross
+            display_cross_with_jitter(window, 0.3, 0.05)
 
-        # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
-        space_pressed = 'space' in keys
-        if not is_oddball and not space_pressed:
-            print("No oddball, no space")
-            await message_queue.put({'trigger_number': 120001, 'time': time.time() * 1000})
-        elif not is_oddball and space_pressed:
-            print("No oddball, space")
-            await message_queue.put({'trigger_number': 120002, 'time': time.time() * 1000})
-        elif is_oddball and space_pressed:
-            print("Oddball, space")
-            await message_queue.put({'trigger_number': 120003, 'time': time.time() * 1000})
-        elif is_oddball and not space_pressed:
-            print("Oddball, no space")
-            await message_queue.put({'trigger_number': 120004, 'time': time.time() * 1000})
+            keys = event.getKeys()
+            # Terminate experiment early if escape is pressed
+            if 'escape' in keys:
+                print("Experiment terminated early.")
+                break
 
-        # Check if end of block
-        if trial['end_of_block']:
-            # Print the image sequence for the current block
-            print(f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
-            # Clear the list for the next block
-            image_sequence = []
+            # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
+            space_pressed = 'space' in keys
+            if not is_oddball and not space_pressed:
+                print("No oddball, no space")
+                await message_queue.put({'trigger_number': 120001, 'time': time.time() * 1000})
+            elif not is_oddball and space_pressed:
+                print("No oddball, space")
+                await message_queue.put({'trigger_number': 120002, 'time': time.time() * 1000})
+            elif is_oddball and space_pressed:
+                print("Oddball, space")
+                await message_queue.put({'trigger_number': 120003, 'time': time.time() * 1000})
+            elif is_oddball and not space_pressed:
+                print("Oddball, no space")
+                await message_queue.put({'trigger_number': 120004, 'time': time.time() * 1000})
 
-            # Display break message at the end of each block
-            display_break_message(window, trial['block'])
+            # Check if end of block
+            if trial['end_of_block']:
+                if EMOTIV_ON:
+                    await asyncio.sleep(0.1)
+                    await stop_record(websocket)
+                    # await asyncio.sleep(0.1)
+                    await teardown_eeg(websocket, subj, session, current_block)
+                    # await asyncio.sleep(0.1)
 
-            # Create a new record for the next block
-            current_block += 1
-            start_index = (current_block - 1) * n_images
-            end_index = start_index + n_images
-            print(f"\nBlock {current_block}, Start Index: {start_index}")
-            print(f"Block {current_block}, End Index: {end_index}\n")
+                # Print the image sequence for the current block
+                print(f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
+                # Clear the list for the next block
+                image_sequence = []
+
+                # Display break message at the end of each block
+                display_break_message(window, trial['block'])
+
+                # Create a new record for the next block
+                if current_block < num_blocks:
+                    current_block += 1
+                    start_index = (current_block - 1) * n_images
+                    end_index = start_index + n_images
+                    print(f"\nBlock {current_block}, Start Index: {start_index}")
+                    print(f"Block {current_block}, End Index: {end_index}\n")
+
+                    if EMOTIV_ON:
+                        await create_record(subj, session, current_block, websocket)
+                        print("Just created new record")
+                        # await asyncio.sleep(0.1)
+    except Exception as err:
+        print(f"An error occured: {err}")
+    # finally:
+    #     if EMOTIV_ON:
+    #         await stop_record(websocket)
+    #         await teardown_eeg(websocket, subj, session)        
 
     # Stop the consumer task
     await message_queue.put(None)
@@ -496,9 +518,13 @@ async def main():
     # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
     # Parameters
-    n_images = 208  # Number of unique images per block
-    n_oddballs = 24  # Number of oddball images per block
-    num_blocks = 8  # Number of blocks
+    # n_images = 208  # Number of unique images per block
+    # n_oddballs = 24  # Number of oddball images per block
+
+    n_images = 4
+    n_oddballs = 0
+
+    num_blocks = 16  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
     window_size = window.size
 
@@ -515,14 +541,15 @@ async def main():
         if EMOTIV_ON:
             experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height))
             recording_task = asyncio.create_task(process_triggers(websocket))
-            await asyncio.gather(experiment_task, recording_task)
+            await asyncio.gather(experiment_task, recording_task) #return exceptions=True
+
         else: 
             await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height)
 
         # Wind down and save results
-        if EMOTIV_ON:
-            await stop_record(websocket)
-            await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
+        # if EMOTIV_ON:
+        #     await stop_record(websocket)
+        #     await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
         # Display completion message
         display_completion_message(window)
 
@@ -531,9 +558,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(main())
-    finally:
-        loop.close()
-    #asyncio.run(main())
+    asyncio.run(main())
