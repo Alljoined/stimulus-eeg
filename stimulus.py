@@ -166,7 +166,7 @@ async def setup_eeg(websocket):
     }, websocket)
 
 
-async def save_eeg(websocket, subj, session, block):
+async def export_record(websocket, subj, session, block):
     # await asyncio.sleep(1)
     # response = await send_message({
     #     "id": 2,
@@ -228,17 +228,8 @@ async def create_record(subj, session, block, websocket):
             "title": f"Subject {subj}, Session {session}, Block {block} Recording"
         }
     }, websocket)
-    print("AAAAA")
-    print(response)
-    print(response.keys())
-    print("BBBBB")
 
-    try:
-        record_id = response["result"]["record"]["uuid"]
-        #record_id = response["warning"]["message"]["recordId"]
-        headset_info["record_id"] = record_id
-    except Exception as e:
-        print(f"Error: {e}")
+    while 'warning' in response and 'code' in response['warning'] and response['warning'] == 18:
         response = await send_message({
             "id": 1,
             "jsonrpc": "2.0",
@@ -249,13 +240,16 @@ async def create_record(subj, session, block, websocket):
                 "title": f"Subject {subj}, Session {session}, Block {block} Recording"
             }
         }, websocket) 
-
         record_id = response["result"]["record"]["uuid"]
-        print(f"response[result]: {response['result']}")
         #record_id = response["warning"]["message"]["recordId"]
-        headset_info["record_id"] = record_id    
+        headset_info["record_id"] = record_id
+
+    else:      
+        if 'result' in response:
+            record_id = response["result"]["record"]["uuid"]
+            #record_id = response["warning"]["message"]["recordId"]
+            headset_info["record_id"] = record_id
     # headset_info["record_ids"].append(record_id)
-    
     # response = await send_message({
     #     "id": 1,
     #     "jsonrpc": "2.0",
@@ -452,7 +446,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
                 display_message(window, "Stop recording...", block=False)
                 await stop_record(websocket)
                 display_message(window, "Saving recording...", block=False)
-                await save_eeg(websocket, subj, session, current_block)
+                await export_record(websocket, subj, session, current_block)
             break
 
         # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
@@ -477,7 +471,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
                 await stop_record(websocket)
                 await asyncio.sleep(1)
                 display_message(window, "Saving recording...", block=False)
-                await save_eeg(websocket, subj, session, current_block)
+                await export_record(websocket, subj, session, current_block)
                 await asyncio.sleep(1)
 
             # Print the image sequence for the current block
