@@ -167,31 +167,6 @@ async def setup_eeg(websocket):
 
 
 async def export_record(websocket, subj, session, block):
-    # await asyncio.sleep(1)
-    # response = await send_message({
-    #     "id": 2,
-    #     "jsonrpc": "2.0",
-    #     "method": "updateSession",
-    #     "params": {
-    #         "cortexToken": headset_info["cortex_token"],
-    #         "session": headset_info["session_id"],
-    #         "status": "close"
-    #     }
-    # }, websocket)
-    # print("session closed:", response)
-    # await asyncio.sleep(1)
-    # response = await send_message({
-    #     "id": 3,
-    #     "jsonrpc": "2.0",
-    #     "method": "controlDevice",
-    #     "params": {
-    #         "command": "disconnect",
-    #         "headset": headset_info["headset"]
-    #     }
-    # }, websocket)
-    # print("headset disconnected:", response)
-    # await asyncio.sleep(1)
-
     # Save to output directory
     output_path = os.path.join("recordings", "subj_" + subj, "session_" + session, "block_" + str(block))
     if not os.path.exists(output_path):
@@ -249,15 +224,6 @@ async def create_record(subj, session, block, websocket):
             record_id = response["result"]["record"]["uuid"]
             #record_id = response["warning"]["message"]["recordId"]
             headset_info["record_id"] = record_id
-    # headset_info["record_ids"].append(record_id)
-    # response = await send_message({
-    #     "id": 1,
-    #     "jsonrpc": "2.0",
-    #     "method": "querySessions",
-    #     "params": {
-    #         "cortexToken": headset_info["cortex_token"],
-    #     }
-    # }, websocket)
 
 
 async def stop_record(websocket):
