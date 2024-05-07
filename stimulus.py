@@ -3,6 +3,7 @@ from psychopy.monitors import Monitor
 from psychopy.clock import Clock
 
 import os
+import datetime
 from scipy.io import loadmat
 from PIL import Image
 import random
@@ -20,8 +21,8 @@ import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 EMOTIV_ON = True
 headset_info = {} # update this with the headset info
@@ -165,34 +166,9 @@ async def setup_eeg(websocket):
     }, websocket)
 
 
-async def teardown_eeg(websocket, subj, session):
-    await asyncio.sleep(1)
-    response = await send_message({
-        "id": 2,
-        "jsonrpc": "2.0",
-        "method": "updateSession",
-        "params": {
-            "cortexToken": headset_info["cortex_token"],
-            "session": headset_info["session_id"],
-            "status": "close"
-        }
-    }, websocket)
-    # print("session closed:", response)
-    await asyncio.sleep(1)
-    response = await send_message({
-        "id": 3,
-        "jsonrpc": "2.0",
-        "method": "controlDevice",
-        "params": {
-            "command": "disconnect",
-            "headset": headset_info["headset"]
-        }
-    }, websocket)
-    # print("headset disconnected:", response)
-    await asyncio.sleep(1)
-
+async def export_record(websocket, subj, session, block):
     # Save to output directory
-    output_path = os.path.join("recordings", "subj_" + subj, "session_" + session)
+    output_path = os.path.join("recordings", "subj_" + subj, "session_" + session, "block_" + str(block))
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_path)
@@ -206,17 +182,17 @@ async def teardown_eeg(websocket, subj, session):
             "cortexToken": headset_info["cortex_token"],
             "folder": output_path,
             "format": "EDFPLUS",
-            "recordIds": headset_info["record_ids"],
+            "recordIds": [headset_info["record_id"]],
             "streamTypes": [
                 "EEG",
                 "MOTION"
             ]
         }
     }, websocket)
-    print("export record response:", response)
+    # print("export record response:", response)
 
 
-async def create_record(subj, session, websocket):
+async def create_record(subj, session, block, websocket):
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -224,26 +200,35 @@ async def create_record(subj, session, websocket):
         "params": {
             "cortexToken": headset_info["cortex_token"],
             "session": headset_info["session_id"],
-            "title": f"Subject {subj}, Session {session} Recording"
+            "title": f"Subject {subj}, Session {session}, Block {block} Recording"
         }
     }, websocket)
-    record_id = response["result"]["record"]["uuid"]
-    headset_info["record_id"] = record_id
-    headset_info["record_ids"].append(record_id)
-    
-    response = await send_message({
-        "id": 1,
-        "jsonrpc": "2.0",
-        "method": "querySessions",
-        "params": {
-            "cortexToken": headset_info["cortex_token"],
-        }
-    }, websocket)
+
+    while 'warning' in response and 'code' in response['warning'] and response['warning'] == 18:
+        response = await send_message({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "createRecord",
+            "params": {
+                "cortexToken": headset_info["cortex_token"],
+                "session": headset_info["session_id"],
+                "title": f"Subject {subj}, Session {session}, Block {block} Recording"
+            }
+        }, websocket) 
+        record_id = response["result"]["record"]["uuid"]
+        #record_id = response["warning"]["message"]["recordId"]
+        headset_info["record_id"] = record_id
+
+    else:      
+        if 'result' in response:
+            record_id = response["result"]["record"]["uuid"]
+            #record_id = response["warning"]["message"]["recordId"]
+            headset_info["record_id"] = record_id
 
 
 async def stop_record(websocket):
-    if not headset_info["record_id"]:
-        return
+    # if not headset_info["record_id"]:
+    #     return
 
     response = await send_message({
         "id": 1,
@@ -254,7 +239,7 @@ async def stop_record(websocket):
             "session": headset_info["session_id"]
         }
     }, websocket)
-    print("stopping record:", response)
+    # print("stopping record:", response)
 
 
 async def record_trigger(message, websocket, debug_mode=False):
@@ -372,7 +357,9 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
     # keyboard.on_press(on_space_press)
 
     if EMOTIV_ON:
-        await create_record(subj, session, websocket)
+        print("CREATE FIRST RECORD")
+        await create_record(subj, session, current_block, websocket)
+
     for idx, trial in enumerate(trials):
         if trial['block'] != current_block:
             current_block = trial['block']
@@ -389,7 +376,6 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             image = images[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
             last_image = image
 
-        
         # Append current image number to the sequence list
         image_sequence.append(trial['image'])
 
@@ -419,9 +405,14 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             elif key == "space":
                 space_pressed = True
                 space_time = (experiment_start_time + timestamp) * 1000
-        
+
         if escape_pressed: # Terminate experiment early if escape is pressed
             print("Experiment terminated early.")
+            if EMOTIV_ON:
+                display_message(window, "Stop recording...", block=False)
+                await stop_record(websocket)
+                display_message(window, "Saving recording...", block=False)
+                await export_record(websocket, subj, session, current_block)
             break
 
         # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
@@ -440,6 +431,15 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
 
         # Check if end of block
         if trial['end_of_block']:
+            if EMOTIV_ON:
+                await asyncio.sleep(0.1)
+                display_message(window, "Stop recording...", block=False)
+                await stop_record(websocket)
+                await asyncio.sleep(1)
+                display_message(window, "Saving recording...", block=False)
+                await export_record(websocket, subj, session, current_block)
+                await asyncio.sleep(1)
+
             # Print the image sequence for the current block
             print(f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
             # Clear the list for the next block
@@ -450,11 +450,23 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             display_message(window, break_message, block=True)
 
             # Create a new record for the next block
-            current_block += 1
-            start_index = (current_block - 1) * n_images
-            end_index = start_index + n_images
-            print(f"\nBlock {current_block}, Start Index: {start_index}")
-            print(f"Block {current_block}, End Index: {end_index}\n")
+            if current_block < num_blocks:
+                current_block += 1
+                start_index = (current_block - 1) * n_images
+                end_index = start_index + n_images
+                print(f"\nBlock {current_block}, Start Index: {start_index}")
+                print(f"Block {current_block}, End Index: {end_index}\n")
+
+                if EMOTIV_ON:
+                    print(f"CREATE {current_block} RECORD")
+                    await create_record(subj, session, current_block, websocket)
+                    print("Just created new record")
+                    # await asyncio.sleep(0.1)
+
+    # finally:
+    #     if EMOTIV_ON:
+    #         await stop_record(websocket)
+    #         await teardown_eeg(websocket, subj, session)        
 
     # Stop the consumer task
     await message_queue.put(None)
@@ -499,7 +511,11 @@ async def main():
     # Parameters
     n_images = 208  # Number of unique images per block
     n_oddballs = 24  # Number of oddball images per block
-    num_blocks = 8  # Number of blocks
+
+    # n_images = 4
+    # n_oddballs = 0
+
+    num_blocks = 16  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
     window_size = window.size
 
@@ -518,16 +534,12 @@ async def main():
         if EMOTIV_ON:
             experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height))
             recording_task = asyncio.create_task(process_triggers(websocket))
-            await asyncio.gather(experiment_task, recording_task)
+            await asyncio.gather(experiment_task, recording_task) #return exceptions=True
+
         else: 
             await run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height)
 
         # Wind down and save results
-        if EMOTIV_ON:
-            display_message(window, "Stop recording...", block=False)
-            await stop_record(websocket)
-            display_message(window, "Saving recording...", block=False)
-            await teardown_eeg(websocket, participant_info['Subject'], participant_info['Session'])
         # Display completion message
         completion_text = "Congratulations! You have completed the experiment.\n\nPress the space bar to exit."
         display_message(window, completion_text, block=True)
@@ -537,9 +549,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(main())
-    finally:
-        loop.close()
-    #asyncio.run(main())
+    asyncio.run(main())
