@@ -6,3 +6,5 @@ scipy
 websocket-client
 huggingface_hub
 h5py
+mne
+ipykernel

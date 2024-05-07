@@ -2,8 +2,7 @@
 .env
 
 # large files
-recordings/**/*.edf
-recordings/**/*.json
+recordings/*
 stimulus/nsd_stimuli.hdf5
 processed-stimulus
 
