@@ -509,11 +509,11 @@ async def main():
     # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
     # Parameters
-    # n_images = 208  # Number of unique images per block
-    # n_oddballs = 24  # Number of oddball images per block
+    n_images = 208  # Number of unique images per block
+    n_oddballs = 24  # Number of oddball images per block
 
-    n_images = 4
-    n_oddballs = 0
+    # n_images = 4
+    # n_oddballs = 0
 
     num_blocks = 16  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
