@@ -345,7 +345,7 @@ def getImages(subj, session, n_images, num_blocks):
     inverse_indices = np.argsort(sorted_indices)  # To revert back to original order
 
     # Mapping from NSD id to coco id
-    df = pd.read_pickle('COCO_MAP')
+    df = pd.read_pickle(COCO_MAP)
     coco_ids = df.iloc[image_indices]['cocoId'].values
 
     with h5py.File(IMAGE_PATH, 'r') as file:
