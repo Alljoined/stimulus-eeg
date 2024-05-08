@@ -3,7 +3,6 @@ from psychopy.monitors import Monitor
 from psychopy.clock import Clock
 
 import os
-import datetime
 from scipy.io import loadmat
 from PIL import Image
 import random
@@ -40,20 +39,40 @@ global_clock.reset()
 async def send_message(message, websocket):
     attempt = 0
     retries = 3
-    while attempt < retries:
+    responses = []
+    finished = False
+
+    messageMethod = message["method"]
+    while attempt < retries and not finished:
         try:
             message_json = json.dumps(message)
             await websocket.send(message_json)
             response = await websocket.recv()
-            return json.loads(response)
+            responses.append(json.loads(response))
+
+            if messageMethod == "stopRecord":
+                while True:
+                    response = await websocket.recv()
+                    responses.append(json.loads(response))
+                    code = responses[-1]["warning"]["code"]
+                    if code == 30:
+                        break
+            if messageMethod == "exportRecord":
+                while True:
+                    response = await websocket.recv()
+                    responses.append(json.loads(response))
+                    if "result" in responses[-1] and len(responses[-1]["result"]["success"]) > 0:
+                        break
+
+            finished = True
         except (websockets.exceptions.ConnectionClosedError, websockets.exceptions.WebSocketException) as e:
             attempt += 1
             print(f"Attempt {attempt}: Failed to communicate with WebSocket server - {e}")
             if attempt >= retries:
                 print("Maximum retry attempts reached. Stopping.")
-                return {}
+                return responses
             await asyncio.sleep(1)  # Wait a bit before retrying
-    return {}
+    return responses
 
 async def setup_eeg(websocket):
     # Initialize EEG, e.g., with Emotiv SDK
@@ -83,11 +102,11 @@ async def setup_eeg(websocket):
         "jsonrpc": "2.0",
         "method": "queryHeadsets"
     }, websocket)
-    if len(response["result"]) == 0:
+    if len(response[-1]["result"]) == 0:
         print("No headsets found")
         exit(1)
     # connect to the headset
-    headset = response["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
+    headset = response[-1]["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
     with open('mapping.json', 'r') as file:
         mapping = json.load(file)
     await send_message({
@@ -110,21 +129,11 @@ async def setup_eeg(websocket):
             "debit": 1000
         }
     }, websocket)
-    if "error" in response:
-        error = response["error"]
+    if "error" in response[-1]:
+        error = response[-1]["error"]
         print(f"Error in authorizing {error}") # if it gets here, probably didn't set up env variables correctly
         exit(1)
-    cortex_token = response["result"]["cortexToken"]
-    # Liscense info
-    # response = await send_message({
-    #     "id": 1,
-    #     "jsonrpc": "2.0",
-    #     "method": "getLicenseInfo",
-    #     "params": {
-    #         "cortexToken": cortex_token
-    #     }
-    # }, websocket)
-    # sometimes requires a delay after authorizing and creating a session
+    cortex_token = response[-1]["result"]["cortexToken"]
     await asyncio.sleep(0.2)
     response = await send_message({
         "id": 1,
@@ -136,9 +145,8 @@ async def setup_eeg(websocket):
             "status": "open"
         }
     }, websocket)
-    session_id = response["result"]["id"]
+    session_id = response[-1]["result"]["id"]
     print("created session", session_id)
-
     await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -154,7 +162,6 @@ async def setup_eeg(websocket):
     headset_info["cortex_token"] = cortex_token
     headset_info["session_id"] = session_id
     headset_info["record_id"] = None
-
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -191,8 +198,9 @@ async def export_and_delete_record(websocket, subj, session, block):
 
     print("EXPORT RESULT")
     print(response)
+    await asyncio.sleep(0.2)
 
-    await send_message({
+    response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
         "method": "deleteRecord",
@@ -201,6 +209,9 @@ async def export_and_delete_record(websocket, subj, session, block):
             "records": [headset_info["record_id"]]
         }
     }, websocket)
+
+    print ("DELETE RECORD")
+    print(response)
 
 
 async def create_record(subj, session, block, websocket):
@@ -218,7 +229,7 @@ async def create_record(subj, session, block, websocket):
 
     print("CREATE RECORD RESPONSE")
     print(response)
-    record_id = response["result"]["record"]["uuid"]
+    record_id = response[-1]["result"]["record"]["uuid"]
     headset_info["record_id"] = record_id
 
 
@@ -232,7 +243,7 @@ async def stop_record(websocket):
             "session": headset_info["session_id"]
         }
     }, websocket)
-    # print("stopping record:", response)
+    print("STOPPING RECORD", response)
 
 
 async def record_trigger(message, websocket, debug_mode=False):
@@ -404,6 +415,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             if EMOTIV_ON:
                 display_message(window, "Stop recording...", block=False)
                 await stop_record(websocket)
+                await asyncio.sleep(1)
                 display_message(window, "Saving recording...", block=False)
                 await export_and_delete_record(websocket, subj, session, current_block)
             break
@@ -501,8 +513,8 @@ async def main():
     window = visual.Window(screen=0, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
     # Parameters
-    n_images = 10  # Number of unique images per block
-    n_oddballs = 2  # Number of oddball images per block
+    n_images = 208  # Number of unique images per block (default 208)
+    n_oddballs = 24  # Number of oddball images per block (default 24)
     num_blocks = 16  # Number of blocks
 
     display_message(window, "Preparing images...", block=False)
