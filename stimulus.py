@@ -97,6 +97,7 @@ async def setup_eeg(websocket):
         }
     }, websocket)
     # query the headsets
+    print("AAA")
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -109,6 +110,7 @@ async def setup_eeg(websocket):
     headset = response[-1]["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
     with open('mapping.json', 'r') as file:
         mapping = json.load(file)
+    print("BBB")
     await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -119,6 +121,7 @@ async def setup_eeg(websocket):
             "mappings": mapping
         }
     }, websocket)
+    print("CCC")
     response = await send_message({ # authorize the connection
         "id": 1,
         "jsonrpc": "2.0",
@@ -126,7 +129,7 @@ async def setup_eeg(websocket):
         "params": {
             "clientId": os.environ.get('CLIENT_ID'),
             "clientSecret": os.environ.get('CLIENT_SECRET'),
-            "debit": 1000
+            "debit": 10
         }
     }, websocket)
     if "error" in response[-1]:
@@ -135,6 +138,7 @@ async def setup_eeg(websocket):
         exit(1)
     cortex_token = response[-1]["result"]["cortexToken"]
     await asyncio.sleep(0.2)
+    print("DDD")
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -146,6 +150,7 @@ async def setup_eeg(websocket):
         }
     }, websocket)
     session_id = response[-1]["result"]["id"]
+    print("EEE")
     print("created session", session_id)
     await send_message({
         "id": 1,
@@ -162,14 +167,6 @@ async def setup_eeg(websocket):
     headset_info["cortex_token"] = cortex_token
     headset_info["session_id"] = session_id
     headset_info["record_id"] = None
-    response = await send_message({
-        "id": 1,
-        "jsonrpc": "2.0",
-        "method": "querySessions",
-        "params": {
-            "cortexToken": cortex_token,
-        }
-    }, websocket)
 
 
 async def export_and_delete_record(websocket, subj, session, block):
@@ -349,7 +346,11 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
+    display_message(window, "Preparing images...", block=False)
     images = getImages(subj, session, n_images, num_blocks)
+
+     # Display instructions
+    display_instructions(window, session)
     print(subj, session, n_images, num_blocks)
 
     # Create a record for the session
@@ -465,7 +466,6 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
                     print(f"CREATE {current_block} RECORD")
                     await create_record(subj, session, current_block, websocket)
                     print("Just created new record")
-                    # await asyncio.sleep(0.1)
 
     # finally:
     #     if EMOTIV_ON:
@@ -517,11 +517,7 @@ async def main():
     n_oddballs = 24  # Number of oddball images per block (default 24)
     num_blocks = 16  # Number of blocks
 
-    display_message(window, "Preparing images...", block=False)
     trials = create_trials(n_images, n_oddballs, num_blocks)
-
-    # Display instructions
-    display_instructions(window, participant_info['Session'])
 
     # Setup EEG
     async with websockets.connect("wss://localhost:6868", ssl=ssl_context) as websocket:
