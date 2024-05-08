@@ -21,8 +21,8 @@ import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+#IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 EMOTIV_ON = True
 headset_info = {} # update this with the headset info
@@ -153,8 +153,7 @@ async def setup_eeg(websocket):
     headset_info["headset"] = headset
     headset_info["cortex_token"] = cortex_token
     headset_info["session_id"] = session_id
-    headset_info["record_ids"] = []
-
+    headset_info["record_id"] = None
 
     response = await send_message({
         "id": 1,
@@ -166,7 +165,7 @@ async def setup_eeg(websocket):
     }, websocket)
 
 
-async def export_record(websocket, subj, session, block):
+async def export_and_delete_record(websocket, subj, session, block):
     # Save to output directory
     output_path = os.path.join("recordings", "subj_" + subj, "session_" + session, "block_" + str(block))
     if not os.path.exists(output_path):
@@ -189,10 +188,23 @@ async def export_record(websocket, subj, session, block):
             ]
         }
     }, websocket)
-    # print("export record response:", response)
+
+    print("EXPORT RESULT")
+    print(response)
+
+    await send_message({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "deleteRecord",
+        "params": {
+            "cortexToken": headset_info["cortex_token"],
+            "records": [headset_info["record_id"]]
+        }
+    }, websocket)
 
 
 async def create_record(subj, session, block, websocket):
+    print("creating record with block num", block)
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -204,32 +216,13 @@ async def create_record(subj, session, block, websocket):
         }
     }, websocket)
 
-    while 'warning' in response and 'code' in response['warning'] and response['warning'] == 18:
-        response = await send_message({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "createRecord",
-            "params": {
-                "cortexToken": headset_info["cortex_token"],
-                "session": headset_info["session_id"],
-                "title": f"Subject {subj}, Session {session}, Block {block} Recording"
-            }
-        }, websocket) 
-        record_id = response["result"]["record"]["uuid"]
-        #record_id = response["warning"]["message"]["recordId"]
-        headset_info["record_id"] = record_id
-
-    else:      
-        if 'result' in response:
-            record_id = response["result"]["record"]["uuid"]
-            #record_id = response["warning"]["message"]["recordId"]
-            headset_info["record_id"] = record_id
+    print("CREATE RECORD RESPONSE")
+    print(response)
+    record_id = response["result"]["record"]["uuid"]
+    headset_info["record_id"] = record_id
 
 
 async def stop_record(websocket):
-    # if not headset_info["record_id"]:
-    #     return
-
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -341,7 +334,7 @@ def getImages(subj, session, n_images, num_blocks):
         pil_images = [Image.fromarray(img) for img in images]
     return pil_images
 
-async def run_experiment(trials, window, websocket, subj, session, n_images, num_blocks, img_width, img_height):
+async def run_experiment(trials, window, websocket, subj, session, n_images, num_blocks):
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
@@ -383,7 +376,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         # print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
 
         # Prepare the image
-        image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
+        image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(7, 7), units="degFlat")
         image_stim.draw()
         # Send trigger
         await message_queue.put({'label': 'stim', 'value': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
@@ -412,7 +405,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
                 display_message(window, "Stop recording...", block=False)
                 await stop_record(websocket)
                 display_message(window, "Saving recording...", block=False)
-                await export_record(websocket, subj, session, current_block)
+                await export_and_delete_record(websocket, subj, session, current_block)
             break
 
         # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
@@ -432,13 +425,12 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         # Check if end of block
         if trial['end_of_block']:
             if EMOTIV_ON:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
                 display_message(window, "Stop recording...", block=False)
                 await stop_record(websocket)
                 await asyncio.sleep(1)
                 display_message(window, "Saving recording...", block=False)
-                await export_record(websocket, subj, session, current_block)
-                await asyncio.sleep(1)
+                await export_and_delete_record(websocket, subj, session, current_block)
 
             # Print the image sequence for the current block
             print(f"\nEnd of Block {trial['block']} Image Sequence: \n {', '.join(map(str, image_sequence))}")
@@ -504,20 +496,17 @@ async def main():
     my_monitor.save()
 
     # Default
-    window = visual.Window(fullscr=True, color=[0, 0, 0], units='pix')
+    # window = visual.Window(fullscr=True, color=[0, 0, 0], size=(2560, 1440), units='pix')
     # Lenovo external monitor   
-    # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
+    window = visual.Window(screen=0, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
 
     # Parameters
-    n_images = 208  # Number of unique images per block
-    n_oddballs = 24  # Number of oddball images per block
-
-    # n_images = 4
-    # n_oddballs = 0
-
+    n_images = 10  # Number of unique images per block
+    n_oddballs = 2  # Number of oddball images per block
     num_blocks = 16  # Number of blocks
-    img_width, img_height = 425, 425  # Define image dimensions
-    window_size = window.size
+
+    display_message(window, "Preparing images...", block=False)
+    trials = create_trials(n_images, n_oddballs, num_blocks)
 
     # Display instructions
     display_instructions(window, participant_info['Session'])
@@ -527,12 +516,10 @@ async def main():
         if EMOTIV_ON:
             display_message(window, "Connecting to headset...", block=False)
             await setup_eeg(websocket)
-        display_message(window, "Preparing images...", block=False)
-        trials = create_trials(n_images, n_oddballs, num_blocks)
         
         # Run the experiment
         if EMOTIV_ON:
-            experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks, img_width, img_height))
+            experiment_task = asyncio.create_task(run_experiment(trials, window, websocket, participant_info['Subject'], participant_info['Session'], n_images, num_blocks))
             recording_task = asyncio.create_task(process_triggers(websocket))
             await asyncio.gather(experiment_task, recording_task) #return exceptions=True
 
