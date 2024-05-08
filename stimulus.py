@@ -17,12 +17,14 @@ import time
 from dotenv import load_dotenv # pip install python-dotenv
 import h5py
 import numpy as np
+import pandas as pd
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
 IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
 #IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
+COCO_MAP = "stimulus/nsd_stim_info_merged.pkl"
 EMOTIV_ON = True
 headset_info = {} # update this with the headset info
 
@@ -335,19 +337,23 @@ def getImages(subj, session, n_images, num_blocks):
     sorted_indices = np.argsort(image_indices)
     inverse_indices = np.argsort(sorted_indices)  # To revert back to original order
 
+    # Mapping from NSD id to coco id
+    df = pd.read_pickle('COCO_MAP')
+    coco_ids = df.iloc[image_indices]['cocoId'].values
+
     with h5py.File(IMAGE_PATH, 'r') as file:
         dataset = file["imgBrick"]
         sorted_images = dataset[image_indices[sorted_indices], :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
         images = sorted_images[inverse_indices]
         pil_images = [Image.fromarray(img) for img in images]
-    return pil_images
+    return pil_images, coco_ids[inverse_indices]
 
 async def run_experiment(trials, window, websocket, subj, session, n_images, num_blocks):
     last_image = None
     # Initialize an empty list to hold the image numbers for the current block
     image_sequence = []
     display_message(window, "Preparing images...", block=False)
-    images = getImages(subj, session, n_images, num_blocks)
+    images, indices = getImages(subj, session, n_images, num_blocks)
 
      # Display instructions
     display_instructions(window, session)
@@ -378,7 +384,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         if is_oddball:
             image = last_image
         else:
-            image = images[trial['image'] - 1] # Recall that trial and img_map is 1-indexed
+            image = images[trial['image'] - 1] # Recall that trial['images] 1-indexed and images is 0 indexed
             last_image = image
 
         # Append current image number to the sequence list
@@ -391,7 +397,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(7, 7), units="degFlat")
         image_stim.draw()
         # Send trigger
-        await message_queue.put({'label': 'stim', 'value': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
+        await message_queue.put({'label': 'stim', 'value': indices[trial['image'] - 1] if not is_oddball else 100000, 'time': time.time() * 1000})
         # Display the image
         window.flip()
         await asyncio.sleep(0.3)
