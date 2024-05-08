@@ -61,21 +61,23 @@ async def send_message(message, websocket):
             message_json = json.dumps(message, cls=NpEncoder)
             await websocket.send(message_json)
             response = await websocket.recv()
-            responses.append(json.loads(response))
+            response = json.loads(response)
 
-            # if messageMethod == "createRecord":
-            #     while 'warning' in response:
-            #             print(f"createRecord WARNING: {response}")
-            #             response = await websocket.recv()
-            #             responses.append(json.loads(response))
+            if "warning" in response and response["warning"]["code"] == 142:
+                response = await websocket.recv()
+                response = json.loads(response)
+
+            responses.append(response)
 
             if messageMethod == "stopRecord":
                 while True:
                     response = await websocket.recv()
                     responses.append(json.loads(response))
-                    code = responses[-1]["warning"]["code"]
-                    if code == 30:
-                        break
+                    # print("IN stopRecord" + response)
+                    if "warning" in responses[-1]:
+                        code = responses[-1]["warning"]["code"]
+                        if code == 30:
+                            break
             if messageMethod == "exportRecord":
                 while True:
                     response = await websocket.recv()
@@ -250,6 +252,7 @@ async def create_record(subj, session, block, websocket):
 
 
 async def stop_record(websocket):
+    print("STOPPING RECORD")
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -259,7 +262,6 @@ async def stop_record(websocket):
             "session": headset_info["session_id"]
         }
     }, websocket)
-    print("STOPPING RECORD", response)
 
 
 async def record_trigger(message, websocket, debug_mode=False):
@@ -534,7 +536,7 @@ async def main():
     # window = visual.Window(fullscr=True, color=[0, 0, 0], units='pix')
 
     # Lenovo external monitor   
-    window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(1920, 1080), color=(0, 0, 0), units='pix')
+    window = visual.Window(screen=0, monitor="Q27q-1L", fullscr=True, size=(1920, 1080), color=(0, 0, 0), units='pix')
     mouse = event.Mouse(win=window)
     mouse.setPos((1920, 1080))
     
