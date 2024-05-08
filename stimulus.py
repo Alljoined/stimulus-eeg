@@ -63,11 +63,11 @@ async def send_message(message, websocket):
             response = await websocket.recv()
             responses.append(json.loads(response))
 
-            if messageMethod == "createRecord":
-                while 'warning' in response:
-                        print(f"createRecord WARNING: {response}")
-                        response = await websocket.recv()
-                        responses.append(json.loads(response))
+            # if messageMethod == "createRecord":
+            #     while 'warning' in response:
+            #             print(f"createRecord WARNING: {response}")
+            #             response = await websocket.recv()
+            #             responses.append(json.loads(response))
 
             if messageMethod == "stopRecord":
                 while True:
