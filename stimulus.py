@@ -39,6 +39,16 @@ experiment_start_time = time.time()
 global_clock = Clock()
 global_clock.reset()
 
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NpEncoder, self).default(obj)
+
 async def send_message(message, websocket):
     attempt = 0
     retries = 3
@@ -48,7 +58,7 @@ async def send_message(message, websocket):
     messageMethod = message["method"]
     while attempt < retries and not finished:
         try:
-            message_json = json.dumps(message)
+            message_json = json.dumps(message, cls=NpEncoder)
             await websocket.send(message_json)
             response = await websocket.recv()
             responses.append(json.loads(response))
@@ -353,7 +363,7 @@ def getImages(subj, session, n_images, num_blocks):
         sorted_images = dataset[image_indices[sorted_indices], :, :, :]  # Assuming index is within the valid range for dataset # pyright: ignore
         images = sorted_images[inverse_indices]
         pil_images = [Image.fromarray(img) for img in images]
-    return pil_images, coco_ids[inverse_indices]
+    return pil_images, coco_ids
 
 async def run_experiment(trials, window, websocket, subj, session, n_images, num_blocks):
     last_image = None
@@ -528,11 +538,15 @@ async def main():
     mouse = event.Mouse(win=window)
     mouse.setPos((1920, 1080))
     
-    # Parameters
+    # Production Parameters
     n_images = 208  # Number of unique images per block (default 208)
     n_oddballs = 24  # Number of oddball images per block (default 24)
-
     num_blocks = 16  # Number of blocks
+
+    # Dev Parameters
+    # n_images = 10  # Number of unique images per block (default 208)
+    # n_oddballs = 0  # Number of oddball images per block (default 24)
+    # num_blocks = 10
 
     trials = create_trials(n_images, n_oddballs, num_blocks)
 
