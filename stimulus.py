@@ -2,6 +2,7 @@ from psychopy import visual, core, event, gui, logging
 from psychopy.monitors import Monitor
 from psychopy.clock import Clock
 
+
 import os
 import datetime
 from scipy.io import loadmat
@@ -383,7 +384,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         # print(f"Block {trial['block']}, Trial {idx + 1}: Image {trial['image']} {'(Oddball)' if is_oddball else ''}")
 
         # Prepare the image
-        image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(img_width, img_height))
+        image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(7, 7), units="degFlat")
         image_stim.draw()
         # Send trigger
         await message_queue.put({'label': 'stim', 'value': trial['image'] if not is_oddball else 100000, 'time': time.time() * 1000})
@@ -498,26 +499,27 @@ async def main():
 
     # Monitor setup
     my_monitor = Monitor(name='Q27q-1L')
-    my_monitor.setWidth(61.42)       # Monitor width in centimeters (physical size of screen)
+    my_monitor.setWidth(59.5)       # Monitor width in centimeters (physical size of screen)
     my_monitor.setDistance(80)    # Viewing distance in centimeters
-    my_monitor.setSizePix((2560, 1440))  # Resolution in pixels
+    my_monitor.setSizePix((1920, 1080))  # Resolution in pixels
     my_monitor.save()
 
     # Default
-    window = visual.Window(fullscr=True, color=[0, 0, 0], units='pix')
-    # Lenovo external monitor   
-    # window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
+    # window = visual.Window(fullscr=True, color=[0, 0, 0], units='pix')
 
+
+    # Lenovo external monitor   
+    window = visual.Window(screen=1, monitor="Q27q-1L", fullscr=True, size=(1920, 1080), color=(0, 0, 0), units='pix')
+    mouse = event.Mouse(win=window)
+    mouse.setPos((1920, 1080))
     # Parameters
     n_images = 208  # Number of unique images per block
     n_oddballs = 24  # Number of oddball images per block
-
-    # n_images = 4
-    # n_oddballs = 0
-
     num_blocks = 16  # Number of blocks
     img_width, img_height = 425, 425  # Define image dimensions
     window_size = window.size
+
+
 
     # Display instructions
     display_instructions(window, participant_info['Session'])
@@ -543,6 +545,8 @@ async def main():
         # Display completion message
         completion_text = "Congratulations! You have completed the experiment.\n\nPress the space bar to exit."
         display_message(window, completion_text, block=True)
+
+        mouse.setVisible(True)
 
         window.close()
         core.quit()
