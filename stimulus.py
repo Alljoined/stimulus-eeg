@@ -20,8 +20,8 @@ import numpy as np
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-#IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 EMOTIV_ON = True
 headset_info = {} # update this with the headset info
@@ -49,6 +49,12 @@ async def send_message(message, websocket):
             await websocket.send(message_json)
             response = await websocket.recv()
             responses.append(json.loads(response))
+
+            if messageMethod == "createRecord":
+                while 'warning' in response:
+                        print(f"createRecord WARNING: {response}")
+                        response = await websocket.recv()
+                        responses.append(json.loads(response))
 
             if messageMethod == "stopRecord":
                 while True:
@@ -515,6 +521,7 @@ async def main():
     # Parameters
     n_images = 208  # Number of unique images per block (default 208)
     n_oddballs = 24  # Number of oddball images per block (default 24)
+
     num_blocks = 16  # Number of blocks
 
     trials = create_trials(n_images, n_oddballs, num_blocks)
