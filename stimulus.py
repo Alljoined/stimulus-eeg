@@ -420,7 +420,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         if escape_pressed: # Terminate experiment early if escape is pressed
             print("Experiment terminated early.")
             if EMOTIV_ON:
-                display_message(window, "Stop recording...", block=False)
+                display_message(window, "Stopping recording...", block=False)
                 await stop_record(websocket)
                 await asyncio.sleep(1)
                 display_message(window, "Saving recording...", block=False)
