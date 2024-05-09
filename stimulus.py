@@ -289,17 +289,18 @@ async def process_triggers(websocket):
 
 
 def validate_block(block_trials):
-    prev = -1
-    for trial in block_trials:
-        if trial == prev:
-            return False
-        prev = trial
-    return True
+    # Check for consecutive oddballs or oddball at the start
+    if block_trials[0] == -1:
+        return False  # Cannot start with an oddball
 
+    for i in range(len(block_trials)-2):
+        if block_trials[i] == -1 and (block_trials[i+1] == -1 or block_trials[i+2] == -1):
+            return False  # No back-to-back oddballs or repeated sequence
+
+    return True
 
 def create_trials(n_images, n_oddballs, num_blocks):
     trials = []
-
     for block in range(num_blocks):
         isValidBlock = False
         block_trials = []
@@ -310,13 +311,20 @@ def create_trials(n_images, n_oddballs, num_blocks):
             images = list(range(start, end))
             oddballs = [-1] * n_oddballs
             block_trials = images + oddballs
-            random.shuffle(block_trials)
-            # ensure no two consecutive trials are the same.
-            # legacy code when we repeated images in a block
-            isValidBlock = validate_block(block_trials)
+            
+            while True:
+                random.shuffle(block_trials)
+                if validate_block(block_trials):
+                    break
+            
+            isValidBlock = True
 
         for idx, trial in enumerate(block_trials):
-            trials.append({'block': (block + 1), 'image': trial, 'end_of_block': (idx == len(block_trials) - 1)})
+            trials.append({
+                'block': (block + 1), 
+                'image': trial, 
+                'end_of_block': (idx == len(block_trials) - 1)
+            })
 
     return trials
 
@@ -538,8 +546,8 @@ async def main():
     mouse.setPos((1920, 1080))
     
     # Production Parameters
-    n_images = 5  # Number of unique images per block (default 208)
-    n_oddballs = 2  # Number of oddball images per block (default 24)
+    n_images = 208  # Number of unique images per block (default 208)
+    n_oddballs = 24  # Number of oddball images per block (default 24)
     num_blocks = 16  # Number of blocks
 
     # Dev Parameters
