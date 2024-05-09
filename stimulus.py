@@ -22,8 +22,8 @@ import pandas as pd
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 COCO_MAP = "stimulus/nsd_stim_info_merged.pkl"
 EMOTIV_ON = True
@@ -538,8 +538,8 @@ async def main():
     mouse.setPos((1920, 1080))
     
     # Production Parameters
-    n_images = 5  # Number of unique images per block (default 208)
-    n_oddballs = 2  # Number of oddball images per block (default 24)
+    n_images = 208  # Number of unique images per block (default 208)
+    n_oddballs = 24  # Number of oddball images per block (default 24)
     num_blocks = 16  # Number of blocks
 
     # Dev Parameters
