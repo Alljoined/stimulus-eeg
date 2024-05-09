@@ -22,8 +22,8 @@ import pandas as pd
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 COCO_MAP = "stimulus/nsd_stim_info_merged.pkl"
 EMOTIV_ON = True
