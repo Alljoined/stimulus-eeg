@@ -22,8 +22,8 @@ import pandas as pd
 
 # Placeholder function for EEG setup and trigger recording
 load_dotenv(override=True)
-# IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
-IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
+IMAGE_PATH = "/Volumes/Rembr2Eject/nsd_stimuli.hdf5"
+# IMAGE_PATH = "stimulus/nsd_stimuli.hdf5"
 EXP_PATH = "stimulus/nsd_expdesign.mat"
 COCO_MAP = "stimulus/nsd_stim_info_merged.pkl"
 EMOTIV_ON = True
@@ -63,7 +63,7 @@ async def send_message(message, websocket):
             response = await websocket.recv()
             response = json.loads(response)
 
-            if "warning" in response and response["warning"]["code"] == 142:
+            while "warning" in response and response["warning"]["code"] == 142:
                 response = await websocket.recv()
                 response = json.loads(response)
 
@@ -118,7 +118,6 @@ async def setup_eeg(websocket):
         }
     }, websocket)
     # query the headsets
-    print("AAA")
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -131,7 +130,6 @@ async def setup_eeg(websocket):
     headset = response[-1]["result"][0]["id"] # assuming the first headset, otherwise can manually specifiy
     with open('mapping.json', 'r') as file:
         mapping = json.load(file)
-    print("BBB")
     await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -142,7 +140,6 @@ async def setup_eeg(websocket):
             "mappings": mapping
         }
     }, websocket)
-    print("CCC")
     response = await send_message({ # authorize the connection
         "id": 1,
         "jsonrpc": "2.0",
@@ -159,7 +156,6 @@ async def setup_eeg(websocket):
         exit(1)
     cortex_token = response[-1]["result"]["cortexToken"]
     await asyncio.sleep(0.2)
-    print("DDD")
     response = await send_message({
         "id": 1,
         "jsonrpc": "2.0",
@@ -171,7 +167,6 @@ async def setup_eeg(websocket):
         }
     }, websocket)
     session_id = response[-1]["result"]["id"]
-    print("EEE")
     print("created session", session_id)
     await send_message({
         "id": 1,
@@ -416,7 +411,8 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(7, 7), units="degFlat")
         image_stim.draw()
         # Send trigger
-        await message_queue.put({'label': 'stim', 'value': indices[trial['image'] - 1] if not is_oddball else 100000, 'time': time.time() * 1000})
+        stim_time = time.time() * 1000
+        await message_queue.put({'label': 'stim', 'value': indices[trial['image'] - 1] if not is_oddball else 100000, 'time': stim_time})
         # Display the image
         window.flip()
         await asyncio.sleep(0.3)
@@ -440,6 +436,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             print("Experiment terminated early.")
             if EMOTIV_ON:
                 display_message(window, "Stopping recording...", block=False)
+                await asyncio.sleep(1)
                 await stop_record(websocket)
                 await asyncio.sleep(1)
                 display_message(window, "Saving recording...", block=False)
@@ -449,7 +446,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         # Record behavioural data (if space is or is not pressed with the oddball/non-oddball image)
         if not is_oddball and not space_pressed:
             # print("No oddball, no space")
-            await message_queue.put({'label': 'behav', 'value': 0, 'time': time.time() * 1000})
+            await message_queue.put({'label': 'behav', 'value': 0, 'time': stim_time + 600})
         elif not is_oddball and space_pressed:
             # print("No oddball, space")
             await message_queue.put({'label': 'behav', 'value': 1, 'time': space_time})
@@ -458,13 +455,13 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             await message_queue.put({'label': 'behav', 'value': 2, 'time': space_time})
         elif is_oddball and not space_pressed:
             # print("Oddball, no space")
-            await message_queue.put({'label': 'behav', 'value': 3, 'time': time.time() * 1000})
+            await message_queue.put({'label': 'behav', 'value': 3, 'time': stim_time + 600})
 
         # Check if end of block
         if trial['end_of_block']:
             if EMOTIV_ON:
-                await asyncio.sleep(0.5)
                 display_message(window, "Stopping recording...", block=False)
+                await asyncio.sleep(1)
                 await stop_record(websocket)
                 await asyncio.sleep(1)
                 display_message(window, "Saving recording...", block=False)
@@ -541,8 +538,8 @@ async def main():
     mouse.setPos((1920, 1080))
     
     # Production Parameters
-    n_images = 208  # Number of unique images per block (default 208)
-    n_oddballs = 24  # Number of oddball images per block (default 24)
+    n_images = 5  # Number of unique images per block (default 208)
+    n_oddballs = 2  # Number of oddball images per block (default 24)
     num_blocks = 16  # Number of blocks
 
     # Dev Parameters
