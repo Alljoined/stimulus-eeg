@@ -1,5 +1,7 @@
 # stimulus-eeg
 
+Pyschopy requires python 3.8.
+
 ## Setup
 
 1. Create a `.env` file based off of [.env.template](./.env.template). Go to [cortex dashboard](https://account.emotiv.com/my-account/cortex-apps/) to get an env key.

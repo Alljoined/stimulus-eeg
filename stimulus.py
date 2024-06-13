@@ -2,7 +2,6 @@ from psychopy import visual, core, event, gui, logging
 from psychopy.monitors import Monitor
 from psychopy.clock import Clock
 
-
 import os
 from scipy.io import loadmat
 from PIL import Image
@@ -55,35 +54,42 @@ async def send_message(message, websocket):
     responses = []
     finished = False
 
+    # if message["id"] == 5:
+    #     import pdb
+    #     pdb.set_trace()
+
     messageMethod = message["method"]
     while attempt < retries and not finished:
         try:
             message_json = json.dumps(message, cls=NpEncoder)
             await websocket.send(message_json)
             response = await websocket.recv()
+            if message["id"] == 5:
+                print(response)
             response = json.loads(response)
+            responses.append(response)
 
             while "warning" in response and response["warning"]["code"] == 142:
                 response = await websocket.recv()
                 response = json.loads(response)
-
-            responses.append(response)
+                responses.append(response)
 
             if messageMethod == "stopRecord":
                 while True:
+                    if "warning" in responses[-1]:
+                        code = responses[-1]["warning"]["code"]
+                        if code == 18:
+                            break
                     response = await websocket.recv()
                     responses.append(json.loads(response))
                     # print("IN stopRecord" + response)
-                    if "warning" in responses[-1]:
-                        code = responses[-1]["warning"]["code"]
-                        if code == 30:
-                            break
+                    
             if messageMethod == "exportRecord":
                 while True:
-                    response = await websocket.recv()
-                    responses.append(json.loads(response))
                     if "result" in responses[-1] and len(responses[-1]["result"]["success"]) > 0:
                         break
+                    response = await websocket.recv()
+                    responses.append(json.loads(response))
 
             finished = True
         except (websockets.exceptions.ConnectionClosedError, websockets.exceptions.WebSocketException) as e:
@@ -92,7 +98,7 @@ async def send_message(message, websocket):
             if attempt >= retries:
                 print("Maximum retry attempts reached. Stopping.")
                 return responses
-            await asyncio.sleep(1)  # Wait a bit before retrying
+            await asyncio.sleep(2)  # Wait a bit before retrying
     return responses
 
 async def setup_eeg(websocket):
@@ -229,8 +235,9 @@ async def export_and_delete_record(websocket, subj, session, block):
 
 async def create_record(subj, session, block, websocket):
     print("creating record with block num", block)
+    
     response = await send_message({
-        "id": 1,
+        "id": 69,
         "jsonrpc": "2.0",
         "method": "createRecord",
         "params": {
@@ -249,7 +256,7 @@ async def create_record(subj, session, block, websocket):
 async def stop_record(websocket):
     print("STOPPING RECORD")
     response = await send_message({
-        "id": 1,
+        "id": 15,
         "jsonrpc": "2.0",
         "method": "stopRecord",
         "params": {
@@ -534,26 +541,28 @@ async def main():
     my_monitor = Monitor(name='Q27q-1L')
     my_monitor.setWidth(59.5)       # Monitor width in centimeters (physical size of screen)
     my_monitor.setDistance(80)    # Viewing distance in centimeters
-    my_monitor.setSizePix((1920, 1080))  # Resolution in pixels
+    my_monitor.setSizePix((2560, 1440))  # Resolution in pixels
     my_monitor.save()
 
     # Default
-    # window = visual.Window(fullscr=True, color=[0, 0, 0], units='pix')
+    #window = visual.Window(fullscr=False, color=[0, 0, 0], units='pix')
+    # window = visual.Window(screen=0, monitor="Q27q-1L", fullscr=False, size=(1920, 1080), color=(0, 0, 0), units='pix')
+
 
     # Lenovo external monitor   
-    window = visual.Window(screen=0, monitor="Q27q-1L", fullscr=True, size=(1920, 1080), color=(0, 0, 0), units='pix')
+    window = visual.Window(screen=0, monitor="Q27q-1L", fullscr=True, size=(2560, 1440), color=(0, 0, 0), units='pix')
     mouse = event.Mouse(win=window)
-    mouse.setPos((1920, 1080))
+    mouse.setPos((2560, 1440))
     
     # Production Parameters
-    n_images = 208  # Number of unique images per block (default 208)
-    n_oddballs = 24  # Number of oddball images per block (default 24)
-    num_blocks = 16  # Number of blocks
+    # n_images = 208  # Number of unique images per block (default 208)
+    # n_oddballs = 24  # Number of oddball images per block (default 24)
+    # num_blocks = 16  # Number of blocks
 
     # Dev Parameters
-    # n_images = 10  # Number of unique images per block (default 208)
-    # n_oddballs = 0  # Number of oddball images per block (default 24)
-    # num_blocks = 10
+    n_images = 10  # Number of unique images per block (default 208)
+    n_oddballs = 0  # Number of oddball images per block (default 24)
+    num_blocks = 10
 
     trials = create_trials(n_images, n_oddballs, num_blocks)
 
@@ -584,4 +593,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.get_event_loop().run_until_complete(main())
+    # asyncio.run(main())
