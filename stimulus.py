@@ -488,7 +488,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             image_sequence = []
 
             # Display break message at the end of each block
-            break_message = f"You've completed block {trial['block']}.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
+            break_message = f"You've completed {trial['block']} blocks out of {num_blocks}.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
             display_message(window, break_message, block=True)
 
             # Create a new record for the next block
@@ -555,14 +555,14 @@ async def main():
     mouse.setPos((2560, 1440))
     
     # Production Parameters
-    # n_images = 208  # Number of unique images per block (default 208)
-    # n_oddballs = 24  # Number of oddball images per block (default 24)
-    # num_blocks = 16  # Number of blocks
+    n_images = 208  # Number of unique images per block (default 208)
+    n_oddballs = 24  # Number of oddball images per block (default 24)
+    num_blocks = 16  # Number of blocks
 
     # Dev Parameters
-    n_images = 10  # Number of unique images per block (default 208)
-    n_oddballs = 0  # Number of oddball images per block (default 24)
-    num_blocks = 10
+    # n_images = 10  # Number of unique images per block (default 208)
+    # n_oddballs = 0  # Number of oddball images per block (default 24)
+    # num_blocks = 10
 
     trials = create_trials(n_images, n_oddballs, num_blocks)
 
