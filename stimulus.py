@@ -343,6 +343,7 @@ def display_instructions(window, session_number):
         "This session consists of 16 experimental blocks.\n\n"
         "You will see sequences of images appearing on the screen, your task is to "
         "press the space bar when you see an image appear twice in a row.\n\n"
+        "Sit comfortably, and keep your gaze focused on the red dot.\n\n"
         "When you are ready, press the space bar to start."
     )
 
@@ -425,15 +426,17 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         # Prepare the image
         image_stim = visual.ImageStim(win=window, image=image, pos=(0, 0), size=(7, 7), units="degFlat")
         image_stim.draw()
+        fixation_dot = visual.Circle(window, size=(0.2,0.2), fillColor=(1, -1, -1), lineColor=(-1, -1, -1), opacity=0.5, edges=128, units="degFlat")
+        fixation_dot.draw()
         # Send trigger
         stim_time = time.time() * 1000
         await message_queue.put({'label': 'stim', 'value': indices[trial['image'] - 1] if not is_oddball else 100000, 'time': stim_time})
         # Display the image
         window.flip()
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)
 
         # Rest screen with a fixation cross
-        display_cross_with_jitter(window, 0.3, 0.05)
+        display_dot_with_jitter(window, 0.1, 0.4)
 
         keys = event.getKeys(keyList=["escape", "space"], timeStamped=global_clock)
 
@@ -450,7 +453,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
         if escape_pressed: # Terminate experiment early if escape is pressed
             print("Experiment terminated early.")
             if EMOTIV_ON:
-                display_message(window, "Stopping recording...", block=False)
+                display_message(window, "Processing recording...", block=False)
                 await asyncio.sleep(1)
                 await stop_record(websocket)
                 await asyncio.sleep(1)
@@ -488,7 +491,7 @@ async def run_experiment(trials, window, websocket, subj, session, n_images, num
             image_sequence = []
 
             # Display break message at the end of each block
-            break_message = f"You've completed {trial['block']} blocks out of {num_blocks}.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
+            break_message = f"You've completed {trial['block']} blocks.\n\nTake a little break and press the space bar when you're ready to continue to the next block."
             display_message(window, break_message, block=True)
 
             # Create a new record for the next block
@@ -520,10 +523,11 @@ def display_message(window, text, block=False):
         event.waitKeys(keyList=['space'])
 
 
-def display_cross_with_jitter(window, base_time, jitter):
+def display_dot_with_jitter(window, base_time, jitter):
     rest_period = base_time + random.randint(0, int(jitter * 100)) / 100.0
-    fixation_cross = visual.TextStim(window, text='+', pos=(0, 0), color=(1, 1, 1), height=40)
-    fixation_cross.draw()
+    # Create a fixation dot with a black border and 50% opacity
+    fixation_dot = visual.Circle(window, size=(0.2,0.2), fillColor=(1, -1, -1), lineColor=(-1, -1, -1), opacity=0.5, edges=128, units="degFlat")
+    fixation_dot.draw()
     window.flip()
     core.wait(rest_period)
 
